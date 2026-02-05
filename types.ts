@@ -30,20 +30,28 @@ export enum ProductNature {
 }
 
 // Master Data Interfaces
-export interface RawMaterial {
+
+export interface MasterAuditFields {
+  isDeleted: boolean;
+  deletedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RawMaterial extends MasterAuditFields {
   id: string;
   code: string; // Mnemonic code (e.g., MND)
   name: string; // e.g., "Mandarini"
   calibers?: string[]; // Ordered list of calibers (e.g., ['AAA', 'AA', 'A'])
 }
 
-export interface RawMaterialSubtype {
+export interface RawMaterialSubtype extends MasterAuditFields {
   id: string;
   rawMaterialId: string;
   name: string; 
 }
 
-export interface Variety {
+export interface Variety extends MasterAuditFields {
   id: string;
   rawMaterialId: string;
   subtypeId?: string;
@@ -51,23 +59,23 @@ export interface Variety {
   name: string; 
 }
 
-export interface Packaging {
+export interface Packaging extends MasterAuditFields {
   id: string;
   code: string; // Mnemonic code (e.g., C34)
   name: string; 
 }
 
-export interface Lot {
+export interface Lot extends MasterAuditFields {
   id: string;
   code: string; // Batch Code (e.g., 14002)
   rawMaterialId: string;
   subtypeId?: string;
-  varietyId?: string;
+  varietyId: string;
   producer: string;
   notes?: string;
 }
 
-export interface ProductType {
+export interface ProductType extends MasterAuditFields {
   id: string;
   code: string; // Mnemonic code (e.g., M12)
   name: string; 
@@ -114,7 +122,7 @@ export interface Calibration {
   lotId?: string; // Reference to Lot registry
   rawMaterialId?: string;
   subtypeId?: string; 
-  varietyId?: string;
+  varietyId: string;
   rawMaterial: string; 
   subtype?: string; 
   variety: string;

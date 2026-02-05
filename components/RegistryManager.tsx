@@ -251,7 +251,7 @@ export const RegistryManager: React.FC = () => {
           ...lotForm,
           code,
           subtypeId: lotForm.subtypeId || undefined,
-          varietyId: lotForm.varietyId || undefined,
+          varietyId: lotForm.varietyId,
           notes: lotForm.notes || undefined
       };
       const success = editingId ? updateLot(editingId, payload) : addLot(payload);
@@ -648,6 +648,7 @@ export const RegistryManager: React.FC = () => {
                                     <div className="col-span-12 md:col-span-2">
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Tipologia</label>
                                         <select 
+                                            required
                                             className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white disabled:bg-slate-50" 
                                             value={lotForm.subtypeId} 
                                             onChange={e => setLotForm({...lotForm, subtypeId: e.target.value})} 
@@ -660,6 +661,7 @@ export const RegistryManager: React.FC = () => {
                                     <div className="col-span-12 md:col-span-2">
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Varietà</label>
                                         <select 
+                                            required
                                             className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white disabled:bg-slate-50" 
                                             value={lotForm.varietyId} 
                                             onChange={e => {
@@ -674,7 +676,7 @@ export const RegistryManager: React.FC = () => {
                                             }} 
                                             disabled={!lotForm.rawMaterialId}
                                         >
-                                            <option value="">Nessuna</option>
+                                            <option value="">Seleziona...</option>
                                             {availableLotVarieties.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                                         </select>
                                     </div>

@@ -31,3 +31,9 @@ Questo repository include il workflow `.github/workflows/deploy-gh-pages.yml` ch
 
 ### Note base path
 La configurazione Vite imposta automaticamente il `base` in GitHub Actions usando il nome repository (es. `/Monito-app/`). In locale resta `/`.
+
+
+## Piano evoluzione anagrafiche (v2)
+
+Per schema dati, validazioni centrali, wireframe UX testuale e migrazione localStorage:
+- `docs/anagrafiche-v2-plan.md`
