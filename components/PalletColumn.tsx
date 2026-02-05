@@ -79,11 +79,16 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
     const finalWeight = safeCalculate(weight);
 
     if (!processId || !finalCases || !finalWeight) return;
-    
+
+    const parsedCases = Number(finalCases);
+    const parsedWeight = Number(finalWeight);
+    if (!Number.isFinite(parsedCases) || !Number.isInteger(parsedCases) || parsedCases <= 0) return;
+    if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) return;
+
     addPallet({ 
         processId, 
-        caseCount: parseInt(finalCases), 
-        weight: parseFloat(finalWeight), 
+        caseCount: parsedCases, 
+        weight: parsedWeight, 
         notes: notes || undefined 
     });
     setCaseCount(''); setWeight(''); setNotes('');
