@@ -76,7 +76,6 @@ export interface ProductType {
   ean?: string;
   weightType: WeightType;
   standardWeight?: number;
-  labelLayoutId?: string; // Specific label template for this product
   
   // Constraints
   rawMaterialId?: string;
@@ -104,9 +103,6 @@ export interface LabelElement {
 }
 
 export interface LabelLayout {
-  id: string;
-  name: string;
-  isDefault: boolean;
   width: number; // mm
   height: number; // mm
   elements: LabelElement[];

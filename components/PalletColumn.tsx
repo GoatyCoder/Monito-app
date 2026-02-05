@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../services/store';
 import { ProcessStatus, WeightType } from '../types';
-import { Package, Trash2, Clock, Info, Printer, X } from 'lucide-react';
+import { Package, Trash2, Clock, Info, Printer } from 'lucide-react';
 import { ConfirmModal } from './ui/Modal';
 import { LabelEditor } from './LabelEditor';
 
@@ -12,60 +12,89 @@ interface Props {
 }
 
 export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
-  const { processes, getPalletsByProcess, addPallet, deletePallet, calibrations, lots, varieties, productTypes, labelLayouts } = useData();
+  const { processes, getPalletsByProcess, addPallet, deletePallet, calibrations, lots, varieties, productTypes } = useData();
   const [caseCount, setCaseCount] = useState<string>('');
   const [weight, setWeight] = useState<string>('');
   const [notes, setNotes] = useState('');
   const [deletePalletId, setDeletePalletId] = useState<string | null>(null);
   
+  // Printing State
   const [printingPallet, setPrintingPallet] = useState<any | null>(null);
-  const [printingLayoutId, setPrintingLayoutId] = useState<string | undefined>(undefined);
 
   const process = processes.find(p => p.id === processId);
   const pallets = processId ? getPalletsByProcess(processId) : [];
   const isOpen = process?.status === ProcessStatus.OPEN;
 
+  // Simple math expression evaluator
   const safeCalculate = (value: string): string => {
     if (!value) return '';
     try {
+      // 1. Normalize: replace comma with dot
       const normalized = value.replace(/,/g, '.');
+      
+      // 2. Security Check: Allow only numbers, operators, dots, parens and spaces
       if (/[^0-9\.\+\-\*\/\(\)\s]/.test(normalized)) return value;
+      
+      // 3. Evaluate if it looks like math (contains operators)
       if (!/[\+\-\*\/]/.test(normalized)) return value;
+
+      // eslint-disable-next-line no-new-func
       const result = new Function('return ' + normalized)();
+      
       if (!isFinite(result) || isNaN(result)) return value;
+      
+      // 4. Return formatted result (max 2 decimals)
       return String(Math.round(result * 100) / 100);
-    } catch { return value; }
+    } catch {
+      return value;
+    }
   };
 
+  const handleBlurCaseCount = () => {
+    const result = safeCalculate(caseCount);
+    if (result !== caseCount) setCaseCount(result);
+  };
+
+  const handleBlurWeight = () => {
+    const result = safeCalculate(weight);
+    if (result !== weight) setWeight(result);
+  };
+
+  // Auto-calculate weight for Egalizzato
   useEffect(() => {
     if (process?.weightType === WeightType.EGALIZZATO && process.standardWeight && caseCount) {
+        // Ensure we calculate based on the evaluated case count (if user typed math)
         const safeCases = safeCalculate(caseCount);
         if (!isNaN(parseFloat(safeCases))) {
-            setWeight((parseFloat(safeCases) * process.standardWeight).toFixed(2));
+            const calculated = (parseFloat(safeCases) * process.standardWeight).toFixed(2);
+            setWeight(calculated);
         }
     }
   }, [caseCount, process?.weightType, process?.standardWeight]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Final calculation check before submit (in case user hits enter directly without blurring)
     const finalCases = safeCalculate(caseCount);
     const finalWeight = safeCalculate(weight);
+
     if (!processId || !finalCases || !finalWeight) return;
-    addPallet({ processId, caseCount: parseInt(finalCases), weight: parseFloat(finalWeight), notes: notes || undefined });
+    
+    addPallet({ 
+        processId, 
+        caseCount: parseInt(finalCases), 
+        weight: parseFloat(finalWeight), 
+        notes: notes || undefined 
+    });
     setCaseCount(''); setWeight(''); setNotes('');
   };
 
   const handlePrint = (pallet: any) => {
+      // Gather all necessary info for the label
       if (!process) return;
-      const pt = productTypes.find(p => p.id === process.productTypeId);
       const calibration = calibrations.find(c => c.id === process.calibrationId);
       const lot = calibration?.lotId ? lots.find(l => l.id === calibration.lotId) : null;
-
-      // Determine the layout
-      // 1. Specific layout for product
-      // 2. Default layout
-      // 3. First layout found
-      const layoutId = pt?.labelLayoutId || labelLayouts.find(l => l.isDefault)?.id || labelLayouts[0]?.id;
+      const pt = productTypes.find(p => p.id === process.productTypeId);
 
       const printData = {
           ...pallet,
@@ -78,65 +107,120 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
           quality: pt?.quality
       };
       setPrintingPallet(printData);
-      setPrintingLayoutId(layoutId);
   };
 
   if (!processId || !process) return (
-    <div className="flex flex-col h-full items-center justify-center bg-slate-50 text-slate-400 p-8"><Package className="w-12 h-12 mb-4 opacity-20" /><p>Seleziona una lavorazione.</p></div>
+    <div className="flex flex-col h-full items-center justify-center bg-slate-50 text-slate-400 p-8"><Package className="w-12 h-12 mb-4 opacity-20" /><p>Seleziona una lavorazione per gestire le pedane.</p></div>
   );
+
+  const totalKg = pallets.reduce((acc, p) => acc + p.weight, 0);
+  const totalCases = pallets.reduce((acc, p) => acc + p.caseCount, 0);
 
   return (
     <div className="flex flex-col h-full bg-slate-50 relative">
-      <div className="bg-white p-4 border-b shadow-sm z-10 flex justify-between items-end shrink-0">
-        <div>
-            {onBack && <button onClick={onBack} className="text-xs text-blue-600 mb-2 font-medium">&larr; Indietro</button>}
-            <h2 className="font-bold text-slate-800 text-lg leading-tight">{process.productType}</h2>
-            <div className="text-xs text-slate-500">{process.packaging} • {process.line}</div>
-        </div>
-        <div className="text-right">
-            <div className="text-2xl font-bold text-blue-600">{pallets.reduce((a,b) => a+b.weight, 0).toLocaleString()} <span className="text-xs text-slate-400 font-normal">Kg</span></div>
-            <div className="text-[10px] text-slate-500 font-bold uppercase">{pallets.length} PEDANE</div>
+      <div className="bg-white p-4 border-b shadow-sm z-10">
+        {onBack && <button onClick={onBack} className="text-xs text-blue-600 mb-2 font-medium">&larr; Indietro</button>}
+        <div className="flex justify-between items-end">
+            <div>
+                <h2 className="font-bold text-slate-800 text-lg leading-tight">{process.productType}</h2>
+                <div className="text-xs text-slate-500 mt-0.5">{process.packaging} • {process.line}</div>
+                {process.weightType === WeightType.EGALIZZATO && (
+                    <div className="mt-1 flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">
+                        Standard: {process.standardWeight} Kg/Collo
+                    </div>
+                )}
+            </div>
+            <div className="text-right">
+                <div className="text-2xl font-bold text-blue-600">{totalKg.toLocaleString()} <span className="text-xs text-slate-400 font-normal uppercase">Kg</span></div>
+                <div className="text-[10px] text-slate-500 font-bold uppercase">{pallets.length} PEDANE • {totalCases} COLLI</div>
+            </div>
         </div>
       </div>
 
-      {isOpen && (
-        <div className="p-4 bg-white border-b shadow-sm z-10">
+      {isOpen ? (
+        <div className="p-4 bg-white border-b sticky top-0 shadow-sm z-10">
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">Registra Nuova Pedana</h3>
             <form onSubmit={handleSubmit} className="flex gap-2 items-end">
-                <div className="flex-1"><label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Colli</label><input type="text" inputMode="decimal" required className="w-full border rounded px-3 py-2 text-xl font-bold" placeholder="0" value={caseCount} onChange={e => setCaseCount(e.target.value)} onBlur={() => setCaseCount(safeCalculate(caseCount))} /></div>
-                <div className="flex-1"><label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Peso (Kg)</label><input type="text" inputMode="decimal" required className="w-full border rounded px-3 py-2 text-xl font-bold" placeholder="0.00" value={weight} onChange={e => setWeight(e.target.value)} onBlur={() => setWeight(safeCalculate(weight))} readOnly={process.weightType === WeightType.EGALIZZATO} /></div>
-                <button type="submit" className="h-[52px] px-6 bg-blue-600 text-white rounded font-bold">SALVA</button>
+                <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Colli</label>
+                    <input 
+                        type="text" 
+                        inputMode="decimal"
+                        required 
+                        className="w-full border-slate-300 border rounded px-3 py-2 text-xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none placeholder:text-slate-300" 
+                        placeholder="0" 
+                        value={caseCount} 
+                        onChange={e => setCaseCount(e.target.value)} 
+                        onBlur={handleBlurCaseCount}
+                        title="Puoi usare formule (es. 7*5)"
+                    />
+                </div>
+                <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Peso (Kg)</label>
+                    <input 
+                        type="text"
+                        inputMode="decimal"
+                        required 
+                        className={`w-full border-slate-300 border rounded px-3 py-2 text-xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none placeholder:text-slate-300 ${process.weightType === WeightType.EGALIZZATO ? 'bg-blue-50/50' : ''}`} 
+                        placeholder="0.00" 
+                        value={weight} 
+                        onChange={e => setWeight(e.target.value)} 
+                        onBlur={handleBlurWeight}
+                        readOnly={process.weightType === WeightType.EGALIZZATO}
+                    />
+                </div>
+                <button type="submit" className="h-[52px] px-6 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-md flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50">SALVA</button>
             </form>
+            {process.weightType === WeightType.EGALIZZATO && (
+                <div className="mt-2 text-[10px] text-blue-500 flex items-center gap-1 font-medium"><Info className="w-3 h-3" /> Il peso è calcolato automaticamente in base ai colli.</div>
+            )}
         </div>
+      ) : (
+          <div className="p-4 bg-slate-200 border-b text-slate-500 text-[10px] font-bold uppercase tracking-widest text-center">Lavorazione Chiusa</div>
       )}
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {pallets.map((p, idx) => (
-            <div key={p.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex justify-between items-center group">
-                <div><div className="font-bold text-slate-800">{p.weight} Kg</div><div className="text-[10px] text-slate-500">{p.caseCount} Colli</div></div>
+        {pallets.map((pallet, index) => (
+            <div key={pallet.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex justify-between items-center group hover:border-blue-200 transition-colors">
+                <div className="flex items-center gap-4">
+                    <div className="bg-slate-50 text-slate-300 font-black text-xs h-8 w-8 rounded-full border border-slate-100 flex items-center justify-center">{pallets.length - index}</div>
+                    <div>
+                        <div className="font-bold text-slate-800 text-lg leading-none">{pallet.weight} <span className="text-xs font-normal text-slate-400">Kg</span></div>
+                        <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-1.5 font-medium uppercase tracking-wider"><Clock className="w-2.5 h-2.5" />{new Date(pallet.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} • {pallet.caseCount} Colli</div>
+                    </div>
+                </div>
                 <div className="flex gap-1">
-                    <button onClick={() => handlePrint(p)} className="text-slate-300 hover:text-blue-600 p-2"><Printer className="w-4 h-4" /></button>
-                    {isOpen && <button onClick={() => setDeletePalletId(p.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 className="w-4 h-4" /></button>}
+                    <button onClick={() => handlePrint(pallet)} className="text-slate-200 hover:text-blue-500 p-2 transition-colors" title="Stampa Etichetta"><Printer className="w-4 h-4" /></button>
+                    {isOpen && <button onClick={() => setDeletePalletId(pallet.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><Trash2 className="w-4 h-4" /></button>}
                 </div>
             </div>
         ))}
+        {pallets.length === 0 && <div className="text-center py-20 text-slate-300 text-xs font-medium uppercase tracking-widest">In attesa della prima pedana...</div>}
       </div>
 
-      <ConfirmModal isOpen={!!deletePalletId} onClose={() => setDeletePalletId(null)} onConfirm={() => deletePalletId && deletePallet(deletePalletId)} title="Elimina Pedana" message="Confermi l'eliminazione?" confirmLabel="Elimina" isDestructive />
+      <ConfirmModal 
+        isOpen={!!deletePalletId}
+        onClose={() => setDeletePalletId(null)}
+        onConfirm={() => deletePalletId && deletePallet(deletePalletId)}
+        title="Elimina Pedana"
+        message="Sei sicuro di voler eliminare definitivamente questa pedana? Il peso totale verrà aggiornato."
+        confirmLabel="Elimina"
+        isDestructive
+      />
 
       {printingPallet && (
           <div className="fixed inset-0 z-[120] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-8">
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl h-[650px] flex flex-col overflow-hidden">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl h-[600px] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
                    <div className="p-4 border-b flex justify-between items-center bg-slate-50">
-                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer className="w-5 h-5"/> Anteprima Stampa</h3>
-                       {/* Added missing X icon here */}
-                       <button onClick={() => setPrintingPallet(null)} className="text-slate-400 hover:text-slate-600"><X/></button>
+                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer className="w-5 h-5"/> Anteprima di Stampa</h3>
+                       <button onClick={() => setPrintingPallet(null)} className="text-slate-400 hover:text-slate-600"><span className="sr-only">Chiudi</span>&times;</button>
                    </div>
                    <div className="flex-1 bg-slate-200 p-8 flex items-center justify-center overflow-auto">
-                       <LabelEditor layoutId={printingLayoutId} readOnly mockData={printingPallet} onClose={() => setPrintingPallet(null)} />
+                       <LabelEditor readOnly mockData={printingPallet} onClose={() => setPrintingPallet(null)} />
                    </div>
                    <div className="p-4 border-t bg-white flex justify-end gap-2">
-                       <button onClick={() => setPrintingPallet(null)} className="px-4 py-2 text-slate-600 font-bold">Chiudi</button>
-                       <button onClick={() => { alert('Stampa in corso...'); setPrintingPallet(null); }} className="px-6 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-md">Stampa</button>
+                       <button onClick={() => setPrintingPallet(null)} className="px-4 py-2 text-slate-600 font-bold text-sm">Chiudi</button>
+                       <button onClick={() => { alert('Inviato alla stampante ZPL/PDF...'); setPrintingPallet(null); }} className="px-6 py-2 bg-blue-600 text-white rounded font-bold text-sm hover:bg-blue-700 shadow-md">Stampa Ora</button>
                    </div>
               </div>
           </div>

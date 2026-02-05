@@ -1,33 +1,11 @@
+
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { 
   Calibration, Process, Pallet, CalibrationStatus, ProcessStatus,
   RawMaterial, RawMaterialSubtype, Variety, Packaging, ProductType,
   WeightType, ProductQuality, ProductNature, Lot, LabelLayout
 } from '../types';
 import { ToastMessage, ToastType } from '../components/ui/Toast';
-
-// Funzione helper per recuperare variabili d'ambiente in modo cross-platform
-const getEnvVar = (name: string): string => {
-  // 1. Prova import.meta.env (Standard Vite)
-  const metaEnv = (import.meta as any).env;
-  if (metaEnv && metaEnv[name]) return metaEnv[name];
-
-  // 2. Prova process.env (Standard Node/Environments)
-  if (typeof process !== 'undefined' && process.env && process.env[name]) {
-    return process.env[name] as string;
-  }
-
-  return '';
-};
-
-const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
-const supabaseKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
-
-// Inizializzazione client Supabase
-const supabase = supabaseUrl && supabaseKey 
-  ? createClient(supabaseUrl, supabaseKey) 
-  : null as any;
 
 interface DataContextType {
   calibrations: Calibration[];
@@ -39,110 +17,109 @@ interface DataContextType {
   packagings: Packaging[];
   productTypes: ProductType[];
   lots: Lot[];
-  labelLayouts: LabelLayout[];
+  labelLayout: LabelLayout; // NEW
   toasts: ToastMessage[];
-  loading: boolean;
 
-  addCalibration: (data: any) => Promise<void>;
-  duplicateCalibration: (id: string, data: any) => Promise<void>;
-  updateCalibrationStatus: (id: string, status: CalibrationStatus) => Promise<void>;
-  addIncomingWeight: (id: string, weight: number) => Promise<void>;
-  addProcess: (data: any) => Promise<void>;
-  closeProcess: (id: string) => Promise<void>;
-  addPallet: (data: any) => Promise<void>;
-  deletePallet: (id: string) => Promise<void>;
-
-  addRawMaterial: (data: any) => Promise<boolean>;
-  updateRawMaterial: (id: string, data: any) => Promise<boolean>;
-  deleteRawMaterial: (id: string) => Promise<void>;
+  addCalibration: (data: Omit<Calibration, 'id' | 'status' | 'incomingRawWeight'>) => void;
+  updateCalibrationStatus: (id: string, status: CalibrationStatus) => void;
+  addIncomingWeight: (id: string, weight: number) => void;
+  duplicateCalibration: (oldId: string, newData: any) => void;
   
-  addSubtype: (name: string, rawMaterialId: string) => Promise<void>;
-  updateSubtype: (id: string, data: any) => Promise<void>;
-  deleteSubtype: (id: string) => Promise<void>;
+  addProcess: (data: Omit<Process, 'id' | 'status' | 'startTime'>) => void;
+  closeProcess: (id: string) => void;
+  addPallet: (data: Omit<Pallet, 'id' | 'timestamp'>) => void;
+  deletePallet: (id: string) => void;
 
-  addVariety: (data: any) => Promise<boolean>;
-  updateVariety: (id: string, data: any) => Promise<void>;
-  deleteVariety: (id: string) => Promise<void>;
+  addRawMaterial: (data: Omit<RawMaterial, 'id'>) => boolean;
+  updateRawMaterial: (id: string, data: Omit<RawMaterial, 'id'>) => boolean;
+  deleteRawMaterial: (id: string) => void;
+  
+  addSubtype: (name: string, rawMaterialId: string) => void;
+  updateSubtype: (id: string, name: string, rawMaterialId: string) => void;
+  deleteSubtype: (id: string) => void;
+  
+  addVariety: (data: Omit<Variety, 'id'>) => boolean;
+  updateVariety: (id: string, data: Omit<Variety, 'id'>) => boolean;
+  deleteVariety: (id: string) => void;
+  
+  addPackaging: (data: Omit<Packaging, 'id'>) => boolean;
+  updatePackaging: (id: string, data: Omit<Packaging, 'id'>) => boolean;
+  deletePackaging: (id: string) => void;
+  
+  addProductType: (data: Omit<ProductType, 'id'>) => boolean;
+  updateProductType: (id: string, data: Omit<ProductType, 'id'>) => boolean;
+  deleteProductType: (id: string) => void;
 
-  addPackaging: (data: any) => Promise<boolean>;
-  updatePackaging: (id: string, data: any) => Promise<void>;
-  deletePackaging: (id: string) => Promise<void>;
+  addLot: (data: Omit<Lot, 'id'>) => boolean;
+  updateLot: (id: string, data: Omit<Lot, 'id'>) => boolean;
+  deleteLot: (id: string) => void;
 
-  addProductType: (data: any) => Promise<boolean>;
-  updateProductType: (id: string, data: any) => Promise<boolean>;
-  deleteProductType: (id: string) => Promise<void>;
-
-  addLot: (data: any) => Promise<boolean>;
-  updateLot: (id: string, data: any) => Promise<void>;
-  deleteLot: (id: string) => Promise<void>;
-
-  addLabelLayout: (name: string) => Promise<LabelLayout | null>;
-  updateLabelLayout: (id: string, layout: Partial<LabelLayout>) => Promise<void>;
-  deleteLabelLayout: (id: string) => Promise<void>;
-  setDefaultLabelLayout: (id: string) => Promise<void>;
+  saveLabelLayout: (layout: LabelLayout) => void; // NEW
 
   getProcessesByCalibration: (calibrationId: string) => Process[];
   getPalletsByProcess: (processId: string) => Pallet[];
+  
   notify: (message: string, type?: ToastType) => void;
   removeToast: (id: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+// Storage Key
+const STORAGE_KEY = 'monito_production_data_v1';
+
+// --- Initial Mock Data ---
+const INITIAL_RAW_MATERIALS: RawMaterial[] = [
+  { id: 'rm-1', code: 'MEL', name: 'Mele', calibers: [] },
+  { id: 'rm-2', code: 'MND', name: 'Mandarini', calibers: ['1X', '1', '2', '3', '4', '5'] },
+  { id: 'rm-3', code: 'UVA', name: 'Uva da Tavola', calibers: [] },
+];
+
+const INITIAL_LABEL_LAYOUT: LabelLayout = {
+  width: 100,
+  height: 100,
+  elements: [
+    { id: 'le-1', type: 'companyInfo', label: 'MONITO FRUIT LTD', x: 0, y: 10, width: 380, height: 30, fontSize: 18, isBold: true, textAlign: 'center' },
+    { id: 'le-2', type: 'productType', label: 'Prodotto', x: 20, y: 60, width: 340, height: 40, fontSize: 24, isBold: true, textAlign: 'left' },
+    { id: 'le-3', type: 'variety', label: 'Varietà', x: 20, y: 110, width: 340, height: 30, fontSize: 16, isBold: false, textAlign: 'left' },
+    { id: 'le-4', type: 'lotCode', label: 'Lotto', x: 20, y: 160, width: 150, height: 30, fontSize: 14, isBold: true, textAlign: 'left' },
+    { id: 'le-5', type: 'weight', label: 'Peso', x: 200, y: 250, width: 160, height: 60, fontSize: 40, isBold: true, textAlign: 'right' },
+    { id: 'le-6', type: 'palletId', label: 'ID Pedana', x: 20, y: 340, width: 340, height: 20, fontSize: 10, isBold: false, textAlign: 'center' },
+  ]
+};
+
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [calibrations, setCalibrations] = useState<Calibration[]>([]);
-  const [processes, setProcesses] = useState<Process[]>([]);
-  const [pallets, setPallets] = useState<Pallet[]>([]);
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
-  const [subtypes, setSubtypes] = useState<RawMaterialSubtype[]>([]);
-  const [varieties, setVarieties] = useState<Variety[]>([]);
-  const [packagings, setPackagings] = useState<Packaging[]>([]);
-  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
-  const [lots, setLots] = useState<Lot[]>([]);
-  const [labelLayouts, setLabelLayouts] = useState<LabelLayout[]>([]);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchData = useCallback(async () => {
-    if (!supabase) {
-        console.error("Supabase client not initialized. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.");
-        setLoading(false);
-        return;
-    }
-    setLoading(true);
+  // Load initial state from LocalStorage
+  const getInitialState = (key: string, defaultValue: any) => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return defaultValue;
     try {
-      const [rm, st, vr, pk, pt, lt, ll, cl, pr, pl] = await Promise.all([
-        supabase.from('raw_materials').select('*'),
-        supabase.from('subtypes').select('*'),
-        supabase.from('varieties').select('*'),
-        supabase.from('packagings').select('*'),
-        supabase.from('product_types').select('*'),
-        supabase.from('lots').select('*'),
-        supabase.from('label_layouts').select('*'),
-        supabase.from('calibrations').select('*').order('start_date', { ascending: false }),
-        supabase.from('processes').select('*'),
-        supabase.from('pallets').select('*')
-      ]);
-
-      setRawMaterials(rm.data || []);
-      setSubtypes(st.data || []);
-      setVarieties(vr.data || []);
-      setPackagings(pk.data || []);
-      setProductTypes(pt.data || []);
-      setLots(lt.data || []);
-      setLabelLayouts(ll.data || []);
-      setCalibrations(cl.data || []);
-      setProcesses(pr.data || []);
-      setPallets(pl.data || []);
-    } catch (error) {
-      console.error("Errore fetch:", error);
-    } finally {
-      setLoading(false);
+      const parsed = JSON.parse(saved);
+      return parsed[key] || defaultValue;
+    } catch {
+      return defaultValue;
     }
-  }, []);
+  };
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const [calibrations, setCalibrations] = useState<Calibration[]>(() => getInitialState('calibrations', []));
+  const [processes, setProcesses] = useState<Process[]>(() => getInitialState('processes', []));
+  const [pallets, setPallets] = useState<Pallet[]>(() => getInitialState('pallets', []));
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(() => getInitialState('rawMaterials', INITIAL_RAW_MATERIALS));
+  const [subtypes, setSubtypes] = useState<RawMaterialSubtype[]>(() => getInitialState('subtypes', []));
+  const [varieties, setVarieties] = useState<Variety[]>(() => getInitialState('varieties', []));
+  const [packagings, setPackagings] = useState<Packaging[]>(() => getInitialState('packagings', []));
+  const [productTypes, setProductTypes] = useState<ProductType[]>(() => getInitialState('productTypes', []));
+  const [lots, setLots] = useState<Lot[]>(() => getInitialState('lots', []));
+  const [labelLayout, setLabelLayout] = useState<LabelLayout>(() => getInitialState('labelLayout', INITIAL_LABEL_LAYOUT));
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  // Auto-save to LocalStorage on change
+  useEffect(() => {
+    const dataToSave = { calibrations, processes, pallets, rawMaterials, subtypes, varieties, packagings, productTypes, lots, labelLayout };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+  }, [calibrations, processes, pallets, rawMaterials, subtypes, varieties, packagings, productTypes, lots, labelLayout]);
+
+  // Notifications logic
   const notify = useCallback((message: string, type: ToastType = 'INFO') => {
     setToasts(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), message, type }]);
   }, []);
@@ -151,269 +128,191 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // --- Mutazioni ---
+  const addCalibration = (data: Omit<Calibration, 'id' | 'status' | 'incomingRawWeight'>) => {
+    setCalibrations(prev => [{ ...data, id: `c-${Date.now()}`, status: CalibrationStatus.PROGRAMMED, incomingRawWeight: 0 }, ...prev]);
+    notify(`Calibrazione ${data.rawMaterial} programmata`, 'SUCCESS');
+  };
 
-  const addCalibration = async (data: any) => {
-    if(!supabase) return;
-    const { data: res, error } = await supabase.from('calibrations').insert([{
-      ...data,
-      status: CalibrationStatus.PROGRAMMED,
-      incoming_raw_weight: 0
-    }]).select();
-    if (!error && res) {
-      setCalibrations(prev => [res[0], ...prev]);
-      notify("Calibrazione salvata su Cloud", "SUCCESS");
+  const updateCalibrationStatus = (id: string, status: CalibrationStatus) => {
+    setCalibrations(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+    if (status === CalibrationStatus.CLOSED) {
+      processes.filter(p => p.calibrationId === id && p.status === ProcessStatus.OPEN).forEach(p => closeProcess(p.id));
+      notify(`Calibrazione chiusa`, 'INFO');
+    } else {
+      notify(`Calibrazione impostata su ${status}`, 'SUCCESS');
     }
   };
 
-  const duplicateCalibration = async (id: string, data: any) => {
-    if(!supabase) return;
-    const { data: res, error } = await supabase.from('calibrations').insert([{
-      ...data,
-      status: CalibrationStatus.PROGRAMMED,
-      incoming_raw_weight: 0
-    }]).select();
-    if (!error && res) {
-      setCalibrations(prev => [res[0], ...prev]);
-      notify("Calibrazione duplicata", "SUCCESS");
-    }
+  const addIncomingWeight = (id: string, weight: number) => {
+    setCalibrations(prev => prev.map(c => c.id === id ? { ...c, incomingRawWeight: c.incomingRawWeight + weight } : c));
+    notify(`Registrati +${weight} Kg di grezzo`, 'SUCCESS');
   };
 
-  const updateCalibrationStatus = async (id: string, status: CalibrationStatus) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('calibrations').update({ status }).eq('id', id);
-    if (!error) {
-      setCalibrations(prev => prev.map(c => c.id === id ? { ...c, status } : c));
-      notify(`Stato aggiornato: ${status}`, "INFO");
-    }
+  const duplicateCalibration = (oldId: string, newData: any) => {
+    updateCalibrationStatus(oldId, CalibrationStatus.CLOSED);
+    const newCalId = `c-${Date.now()}`;
+    const newCal: Calibration = { ...newData, id: newCalId, startDate: new Date().toISOString(), status: CalibrationStatus.OPEN, incomingRawWeight: 0 };
+    setCalibrations(prev => [newCal, ...prev]);
+    const newProcesses = processes.filter(p => p.calibrationId === oldId && p.status === ProcessStatus.OPEN).map(p => ({
+      ...p, id: `p-${Date.now()}-${Math.random()}`, calibrationId: newCalId, startTime: new Date().toISOString(), endTime: undefined, status: ProcessStatus.OPEN
+    }));
+    setProcesses(prev => [...prev, ...newProcesses]);
+    notify(`Cambio lotto effettuato con successo`, 'SUCCESS');
   };
 
-  const addIncomingWeight = async (id: string, weight: number) => {
-    if(!supabase) return;
-    const current = calibrations.find(c => c.id === id)?.incomingRawWeight || 0;
-    const { error } = await supabase.from('calibrations').update({ incoming_raw_weight: current + weight }).eq('id', id);
-    if (!error) {
-      setCalibrations(prev => prev.map(c => c.id === id ? { ...c, incomingRawWeight: current + weight } : c));
-    }
+  const addProcess = (data: Omit<Process, 'id' | 'status' | 'startTime'>) => {
+    const pt = productTypes.find(p => p.id === data.productTypeId);
+    setProcesses(prev => [{ ...data, id: `p-${Date.now()}`, startTime: new Date().toISOString(), status: ProcessStatus.OPEN, weightType: pt?.weightType, standardWeight: pt?.standardWeight }, ...prev]);
+    notify(`Lavorazione avviata su ${data.line}`, 'SUCCESS');
   };
 
-  const addProcess = async (data: any) => {
-    if(!supabase) return;
-    const { data: res, error } = await supabase.from('processes').insert([{
-      ...data,
-      start_time: new Date().toISOString(),
-      status: ProcessStatus.OPEN
-    }]).select();
-    if (!error && res) {
-      setProcesses(prev => [res[0], ...prev]);
-    }
+  const closeProcess = (id: string) => {
+    setProcesses(prev => prev.map(p => p.id === id ? { ...p, status: ProcessStatus.CLOSED, endTime: new Date().toISOString() } : p));
+    notify(`Lavorazione completata e chiusa`, 'INFO');
   };
 
-  const closeProcess = async (id: string) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('processes').update({ 
-      status: ProcessStatus.CLOSED, 
-      end_time: new Date().toISOString() 
-    }).eq('id', id);
-    if (!error) {
-      setProcesses(prev => prev.map(p => p.id === id ? { ...p, status: ProcessStatus.CLOSED } : p));
-    }
+  const addPallet = (data: Omit<Pallet, 'id' | 'timestamp'>) => {
+    setPallets(prev => [{ ...data, id: `pl-${Date.now()}`, timestamp: new Date().toISOString() }, ...prev]);
+    notify(`Pedana registrata (${data.weight} Kg)`, 'SUCCESS');
   };
 
-  const addPallet = async (data: any) => {
-    if(!supabase) return;
-    const { data: res, error } = await supabase.from('pallets').insert([data]).select();
-    if (!error && res) {
-      setPallets(prev => [res[0], ...prev]);
-      notify("Pedana registrata", "SUCCESS");
-    }
+  const deletePallet = (id: string) => {
+    setPallets(prev => prev.filter(p => p.id !== id));
+    notify(`Pedana eliminata`, 'INFO');
   };
 
-  const deletePallet = async (id: string) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('pallets').delete().eq('id', id);
-    if (!error) setPallets(prev => prev.filter(p => p.id !== id));
+  const addRawMaterial = (data: Omit<RawMaterial, 'id'>) => {
+    if (rawMaterials.some(r => r.code.toUpperCase() === data.code.toUpperCase())) return false;
+    // Initialize calibers as empty array if not provided
+    setRawMaterials(prev => [{ id: `rm-${Date.now()}`, calibers: [], ...data }, ...prev]);
+    notify(`Grezzo "${data.name}" aggiunto`, 'SUCCESS');
+    return true;
   };
 
-  // --- ANAGRAFICHE ---
-
-  // Raw Materials
-  const addRawMaterial = async (data: any) => {
-    if(!supabase) return false;
-    const { data: res, error } = await supabase.from('raw_materials').insert([data]).select();
-    if (!error && res) {
-      setRawMaterials(prev => [res[0], ...prev]);
-      return true;
-    }
-    return false;
+  const updateRawMaterial = (id: string, data: Omit<RawMaterial, 'id'>) => {
+    if (rawMaterials.some(r => r.code.toUpperCase() === data.code.toUpperCase() && r.id !== id)) return false;
+    setRawMaterials(prev => prev.map(i => i.id === id ? { ...i, ...data } : i));
+    notify(`Grezzo aggiornato`, 'SUCCESS');
+    return true;
   };
 
-  const updateRawMaterial = async (id: string, data: any) => {
-    if(!supabase) return false;
-    const { error } = await supabase.from('raw_materials').update(data).eq('id', id);
-    if (!error) {
-      setRawMaterials(prev => prev.map(r => r.id === id ? { ...r, ...data } : r));
-      return true;
-    }
-    return false;
+  const deleteRawMaterial = (id: string) => {
+    setRawMaterials(prev => prev.filter(i => i.id !== id));
+    notify(`Grezzo rimosso`, 'INFO');
+  };
+  
+  const addSubtype = (name: string, rawMaterialId: string) => {
+    setSubtypes(prev => [{ id: `st-${Date.now()}`, name, rawMaterialId }, ...prev]);
+    notify(`Tipologia "${name}" aggiunta`, 'SUCCESS');
   };
 
-  const deleteRawMaterial = async (id: string) => {
-    if(!supabase) return;
-    await supabase.from('raw_materials').delete().eq('id', id);
-    setRawMaterials(prev => prev.filter(r => r.id !== id));
+  const updateSubtype = (id: string, name: string, rawMaterialId: string) => {
+    setSubtypes(prev => prev.map(i => i.id === id ? { ...i, name, rawMaterialId } : i));
+    notify(`Tipologia aggiornata`, 'SUCCESS');
   };
 
-  // Subtypes
-  const addSubtype = async (name: string, raw_material_id: string) => {
-    if(!supabase) return;
-    const { data: res } = await supabase.from('subtypes').insert([{ name, raw_material_id }]).select();
-    if (res) setSubtypes(prev => [res[0], ...prev]);
+  const deleteSubtype = (id: string) => {
+    setSubtypes(prev => prev.filter(i => i.id !== id));
+    notify(`Tipologia rimossa`, 'INFO');
+  };
+  
+  const addVariety = (data: Omit<Variety, 'id'>) => {
+    if (varieties.some(v => v.code.toUpperCase() === data.code.toUpperCase())) return false;
+    setVarieties(prev => [{ id: `v-${Date.now()}`, ...data }, ...prev]);
+    notify(`Varietà "${data.name}" aggiunta`, 'SUCCESS');
+    return true;
   };
 
-  const updateSubtype = async (id: string, data: any) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('subtypes').update(data).eq('id', id);
-    if(!error) setSubtypes(prev => prev.map(x => x.id === id ? { ...x, ...data } : x));
+  const updateVariety = (id: string, data: Omit<Variety, 'id'>) => {
+    if (varieties.some(v => v.code.toUpperCase() === data.code.toUpperCase() && v.id !== id)) return false;
+    setVarieties(prev => prev.map(i => i.id === id ? { ...i, ...data } : i));
+    notify(`Varietà aggiornata`, 'SUCCESS');
+    return true;
   };
 
-  const deleteSubtype = async (id: string) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('subtypes').delete().eq('id', id);
-    if(!error) setSubtypes(prev => prev.filter(x => x.id !== id));
+  const deleteVariety = (id: string) => {
+    setVarieties(prev => prev.filter(i => i.id !== id));
+    notify(`Varietà rimossa`, 'INFO');
+  };
+  
+  const addPackaging = (data: Omit<Packaging, 'id'>) => {
+    if (packagings.some(p => p.code.toUpperCase() === data.code.toUpperCase())) return false;
+    setPackagings(prev => [{ id: `pkg-${Date.now()}`, ...data }, ...prev]);
+    notify(`Imballaggio "${data.name}" aggiunto`, 'SUCCESS');
+    return true;
   };
 
-  // Varieties
-  const addVariety = async (data: any) => {
-    if(!supabase) return false;
-    const { data: res } = await supabase.from('varieties').insert([data]).select();
-    if (res) { setVarieties(prev => [res[0], ...prev]); return true; }
-    return false;
+  const updatePackaging = (id: string, data: Omit<Packaging, 'id'>) => {
+    if (packagings.some(p => p.code.toUpperCase() === data.code.toUpperCase() && p.id !== id)) return false;
+    setPackagings(prev => prev.map(i => i.id === id ? { ...i, ...data } : i));
+    notify(`Imballaggio aggiornato`, 'SUCCESS');
+    return true;
   };
 
-  const updateVariety = async (id: string, data: any) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('varieties').update(data).eq('id', id);
-    if(!error) setVarieties(prev => prev.map(x => x.id === id ? { ...x, ...data } : x));
+  const deletePackaging = (id: string) => {
+    setPackagings(prev => prev.filter(i => i.id !== id));
+    notify(`Imballaggio rimosso`, 'INFO');
+  };
+  
+  const addProductType = (data: Omit<ProductType, 'id'>) => {
+    if (productTypes.some(pt => pt.code.toUpperCase() === data.code.toUpperCase())) return false;
+    setProductTypes(prev => [{ ...data, id: `pt-${Date.now()}` }, ...prev]);
+    notify(`Articolo "${data.name}" aggiunto`, 'SUCCESS');
+    return true;
   };
 
-  const deleteVariety = async (id: string) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('varieties').delete().eq('id', id);
-    if(!error) setVarieties(prev => prev.filter(x => x.id !== id));
+  const updateProductType = (id: string, data: Omit<ProductType, 'id'>) => {
+    if (productTypes.some(pt => pt.code.toUpperCase() === data.code.toUpperCase() && pt.id !== id)) return false;
+    setProductTypes(prev => prev.map(i => i.id === id ? { ...i, ...data } : i));
+    notify(`Articolo aggiornato`, 'SUCCESS');
+    return true;
   };
 
-  // Packagings
-  const addPackaging = async (data: any) => {
-    if(!supabase) return false;
-    const { data: res } = await supabase.from('packagings').insert([data]).select();
-    if (res) { setPackagings(prev => [res[0], ...prev]); return true; }
-    return false;
+  const deleteProductType = (id: string) => {
+    setProductTypes(prev => prev.filter(i => i.id !== id));
+    notify(`Articolo rimosso`, 'INFO');
   };
 
-  const updatePackaging = async (id: string, data: any) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('packagings').update(data).eq('id', id);
-    if(!error) setPackagings(prev => prev.map(x => x.id === id ? { ...x, ...data } : x));
+  const addLot = (data: Omit<Lot, 'id'>) => {
+    if (lots.some(l => l.code.toUpperCase() === data.code.toUpperCase())) return false;
+    setLots(prev => [{ ...data, id: `l-${Date.now()}` }, ...prev]);
+    notify(`Lotto "${data.code}" aggiunto`, 'SUCCESS');
+    return true;
   };
 
-  const deletePackaging = async (id: string) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('packagings').delete().eq('id', id);
-    if(!error) setPackagings(prev => prev.filter(x => x.id !== id));
+  const updateLot = (id: string, data: Omit<Lot, 'id'>) => {
+    if (lots.some(l => l.code.toUpperCase() === data.code.toUpperCase() && l.id !== id)) return false;
+    setLots(prev => prev.map(i => i.id === id ? { ...i, ...data } : i));
+    notify(`Lotto aggiornato`, 'SUCCESS');
+    return true;
   };
 
-  // Product Types
-  const addProductType = async (data: any) => {
-    if(!supabase) return false;
-    const { data: res } = await supabase.from('product_types').insert([data]).select();
-    if (res) { setProductTypes(prev => [res[0], ...prev]); return true; }
-    return false;
+  const deleteLot = (id: string) => {
+    setLots(prev => prev.filter(i => i.id !== id));
+    notify(`Lotto rimosso`, 'INFO');
   };
 
-  const updateProductType = async (id: string, data: any) => {
-    if(!supabase) return false;
-    const { error } = await supabase.from('product_types').update(data).eq('id', id);
-    if (!error) {
-        setProductTypes(prev => prev.map(x => x.id === id ? { ...x, ...data } : x));
-        return true;
-    }
-    return false;
+  const saveLabelLayout = (layout: LabelLayout) => {
+      setLabelLayout(layout);
+      notify('Layout etichetta salvato', 'SUCCESS');
   };
 
-  const deleteProductType = async (id: string) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('product_types').delete().eq('id', id);
-    if(!error) setProductTypes(prev => prev.filter(x => x.id !== id));
-  };
-
-  // Lots
-  const addLot = async (data: any) => {
-    if(!supabase) return false;
-    const { data: res } = await supabase.from('lots').insert([data]).select();
-    if (res) { setLots(prev => [res[0], ...prev]); return true; }
-    return false;
-  };
-
-  const updateLot = async (id: string, data: any) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('lots').update(data).eq('id', id);
-    if(!error) setLots(prev => prev.map(x => x.id === id ? { ...x, ...data } : x));
-  };
-
-  const deleteLot = async (id: string) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('lots').delete().eq('id', id);
-    if(!error) setLots(prev => prev.filter(x => x.id !== id));
-  };
-
-  // Label Layouts
-  const addLabelLayout = async (name: string) => {
-    if(!supabase) return null;
-    const { data: res } = await supabase.from('label_layouts').insert([{
-        name, is_default: labelLayouts.length === 0, width: 400, height: 600, elements: []
-    }]).select();
-    if (res) {
-        setLabelLayouts(prev => [...prev, res[0]]);
-        return res[0];
-    }
-    return null;
-  };
-
-  const updateLabelLayout = async (id: string, updates: Partial<LabelLayout>) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('label_layouts').update(updates).eq('id', id);
-    if (!error) setLabelLayouts(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
-  };
-
-  const deleteLabelLayout = async (id: string) => {
-    if(!supabase) return;
-    const { error } = await supabase.from('label_layouts').delete().eq('id', id);
-    if(!error) setLabelLayouts(prev => prev.filter(l => l.id !== id));
-  };
-
-  const setDefaultLabelLayout = async (id: string) => {
-    if(!supabase) return;
-    await supabase.from('label_layouts').update({ is_default: false }).neq('id', id);
-    await supabase.from('label_layouts').update({ is_default: true }).eq('id', id);
-    setLabelLayouts(prev => prev.map(l => ({ ...l, is_default: l.id === id })));
-  };
-
-  const getProcessesByCalibration = useCallback((id: string) => processes.filter(p => (p as any).calibration_id === id || p.calibrationId === id), [processes]);
-  const getPalletsByProcess = useCallback((id: string) => pallets.filter(p => (p as any).process_id === id || p.processId === id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()), [pallets]);
+  const getProcessesByCalibration = useCallback((id: string) => processes.filter(p => p.calibrationId === id), [processes]);
+  const getPalletsByProcess = useCallback((id: string) => pallets.filter(p => p.processId === id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()), [pallets]);
 
   return (
     <DataContext.Provider value={{
-      calibrations, processes, pallets, rawMaterials, subtypes, varieties, packagings, productTypes, lots, labelLayouts, toasts, loading,
-      addCalibration, duplicateCalibration, updateCalibrationStatus, addIncomingWeight, addProcess, closeProcess, addPallet, deletePallet,
+      calibrations, processes, pallets, rawMaterials, subtypes, varieties, packagings, productTypes, lots, labelLayout, toasts,
+      addCalibration, updateCalibrationStatus, addIncomingWeight, duplicateCalibration, addProcess, closeProcess, addPallet, deletePallet,
       addRawMaterial, updateRawMaterial, deleteRawMaterial, 
-      addSubtype, updateSubtype, deleteSubtype,
-      addVariety, updateVariety, deleteVariety,
-      addPackaging, updatePackaging, deletePackaging,
+      addSubtype, updateSubtype, deleteSubtype, 
+      addVariety, updateVariety, deleteVariety, 
+      addPackaging, updatePackaging, deletePackaging, 
       addProductType, updateProductType, deleteProductType,
       addLot, updateLot, deleteLot,
-      addLabelLayout, updateLabelLayout, deleteLabelLayout, setDefaultLabelLayout,
-      getProcessesByCalibration, getPalletsByProcess, notify, removeToast
+      saveLabelLayout,
+      getProcessesByCalibration, getPalletsByProcess,
+      notify, removeToast
     }}>
       {children}
     </DataContext.Provider>
