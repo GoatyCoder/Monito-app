@@ -158,7 +158,7 @@ export const RegistryManager: React.FC = () => {
     });
   };
 
-  const handleAddPt = (e: React.FormEvent) => {
+  const handleAddPt = async (e: React.FormEvent) => {
     e.preventDefault();
     const code = ptForm.code.trim().toUpperCase();
     const payload = {
@@ -172,21 +172,22 @@ export const RegistryManager: React.FC = () => {
         varietyId: ptForm.varietyId || undefined,
         labelLayoutId: ptForm.labelLayoutId || undefined
     };
-    const success = editingId ? updateProductType(editingId, payload) : addProductType(payload);
+    const success = editingId ? await updateProductType(editingId, payload) : await addProductType(payload);
     if (!success) setValidationError(`Codice "${code}" già esistente!`);
     else cancelEdit();
   };
 
-  const handleCreateLayout = () => {
+  const handleCreateLayout = async () => {
       if (newLayoutName.trim()) {
-          const layout = addLabelLayout(newLayoutName.trim());
-          setEditingLayoutId(layout.id);
-          setNewLayoutName('');
+          const layout = await addLabelLayout(newLayoutName.trim());
+          if (layout) {
+              setEditingLayoutId(layout.id);
+              setNewLayoutName('');
+          }
       }
   };
 
-  // Fixed: Added missing handlers for Raw Materials registry
-  const handleAddRawMaterial = (e: React.FormEvent) => {
+  const handleAddRawMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     const code = newRawCode.trim().toUpperCase();
     const data = {
@@ -197,9 +198,9 @@ export const RegistryManager: React.FC = () => {
     
     let success = false;
     if (editingId) {
-      success = updateRawMaterial(editingId, data);
+      success = await updateRawMaterial(editingId, data);
     } else {
-      success = addRawMaterial(data);
+      success = await addRawMaterial(data);
     }
 
     if (!success) {
