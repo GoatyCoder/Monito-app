@@ -23,7 +23,7 @@ interface DataContextType {
   addCalibration: (data: Omit<Calibration, 'id' | 'status' | 'incomingRawWeight'>) => void;
   updateCalibrationStatus: (id: string, status: CalibrationStatus) => void;
   addIncomingWeight: (id: string, weight: number) => void;
-  duplicateCalibration: (oldId: string, newData: any) => void;
+  duplicateCalibration: (oldId: string, newData: Omit<Calibration, 'id' | 'startDate' | 'status' | 'incomingRawWeight'>) => void;
   
   addProcess: (data: Omit<Process, 'id' | 'status' | 'startTime'>) => void;
   closeProcess: (id: string) => void;
@@ -129,7 +129,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const addCalibration = (data: Omit<Calibration, 'id' | 'status' | 'incomingRawWeight'>) => {
-    setCalibrations(prev => [{ ...data, id: `c-${Date.now()}`, status: CalibrationStatus.PROGRAMMED, incomingRawWeight: 0 }, ...prev]);
+    setCalibrations(prev => [{ ...data, id: `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, status: CalibrationStatus.PROGRAMMED, incomingRawWeight: 0 }, ...prev]);
     notify(`Calibrazione ${data.rawMaterial} programmata`, 'SUCCESS');
   };
 
@@ -144,13 +144,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addIncomingWeight = (id: string, weight: number) => {
+    if (!Number.isFinite(weight) || weight <= 0) {
+      notify('Peso grezzo non valido', 'ERROR');
+      return;
+    }
     setCalibrations(prev => prev.map(c => c.id === id ? { ...c, incomingRawWeight: c.incomingRawWeight + weight } : c));
     notify(`Registrati +${weight} Kg di grezzo`, 'SUCCESS');
   };
 
-  const duplicateCalibration = (oldId: string, newData: any) => {
+  const duplicateCalibration = (oldId: string, newData: Omit<Calibration, 'id' | 'startDate' | 'status' | 'incomingRawWeight'>) => {
     updateCalibrationStatus(oldId, CalibrationStatus.CLOSED);
-    const newCalId = `c-${Date.now()}`;
+    const newCalId = `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const newCal: Calibration = { ...newData, id: newCalId, startDate: new Date().toISOString(), status: CalibrationStatus.OPEN, incomingRawWeight: 0 };
     setCalibrations(prev => [newCal, ...prev]);
     const newProcesses = processes.filter(p => p.calibrationId === oldId && p.status === ProcessStatus.OPEN).map(p => ({
@@ -162,7 +166,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addProcess = (data: Omit<Process, 'id' | 'status' | 'startTime'>) => {
     const pt = productTypes.find(p => p.id === data.productTypeId);
-    setProcesses(prev => [{ ...data, id: `p-${Date.now()}`, startTime: new Date().toISOString(), status: ProcessStatus.OPEN, weightType: pt?.weightType, standardWeight: pt?.standardWeight }, ...prev]);
+    setProcesses(prev => [{ ...data, id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, startTime: new Date().toISOString(), status: ProcessStatus.OPEN, weightType: pt?.weightType, standardWeight: pt?.standardWeight }, ...prev]);
     notify(`Lavorazione avviata su ${data.line}`, 'SUCCESS');
   };
 
@@ -172,7 +176,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addPallet = (data: Omit<Pallet, 'id' | 'timestamp'>) => {
-    setPallets(prev => [{ ...data, id: `pl-${Date.now()}`, timestamp: new Date().toISOString() }, ...prev]);
+    setPallets(prev => [{ ...data, id: `pl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, timestamp: new Date().toISOString() }, ...prev]);
     notify(`Pedana registrata (${data.weight} Kg)`, 'SUCCESS');
   };
 
@@ -184,7 +188,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addRawMaterial = (data: Omit<RawMaterial, 'id'>) => {
     if (rawMaterials.some(r => r.code.toUpperCase() === data.code.toUpperCase())) return false;
     // Initialize calibers as empty array if not provided
-    setRawMaterials(prev => [{ id: `rm-${Date.now()}`, calibers: [], ...data }, ...prev]);
+    setRawMaterials(prev => [{ id: `rm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, calibers: [], ...data }, ...prev]);
     notify(`Grezzo "${data.name}" aggiunto`, 'SUCCESS');
     return true;
   };
@@ -202,7 +206,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
   
   const addSubtype = (name: string, rawMaterialId: string) => {
-    setSubtypes(prev => [{ id: `st-${Date.now()}`, name, rawMaterialId }, ...prev]);
+    setSubtypes(prev => [{ id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name, rawMaterialId }, ...prev]);
     notify(`Tipologia "${name}" aggiunta`, 'SUCCESS');
   };
 
@@ -218,7 +222,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const addVariety = (data: Omit<Variety, 'id'>) => {
     if (varieties.some(v => v.code.toUpperCase() === data.code.toUpperCase())) return false;
-    setVarieties(prev => [{ id: `v-${Date.now()}`, ...data }, ...prev]);
+    setVarieties(prev => [{ id: `v-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ...data }, ...prev]);
     notify(`Varietà "${data.name}" aggiunta`, 'SUCCESS');
     return true;
   };
@@ -237,7 +241,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const addPackaging = (data: Omit<Packaging, 'id'>) => {
     if (packagings.some(p => p.code.toUpperCase() === data.code.toUpperCase())) return false;
-    setPackagings(prev => [{ id: `pkg-${Date.now()}`, ...data }, ...prev]);
+    setPackagings(prev => [{ id: `pkg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ...data }, ...prev]);
     notify(`Imballaggio "${data.name}" aggiunto`, 'SUCCESS');
     return true;
   };
@@ -256,7 +260,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const addProductType = (data: Omit<ProductType, 'id'>) => {
     if (productTypes.some(pt => pt.code.toUpperCase() === data.code.toUpperCase())) return false;
-    setProductTypes(prev => [{ ...data, id: `pt-${Date.now()}` }, ...prev]);
+    setProductTypes(prev => [{ ...data, id: `pt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }, ...prev]);
     notify(`Articolo "${data.name}" aggiunto`, 'SUCCESS');
     return true;
   };
@@ -275,7 +279,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addLot = (data: Omit<Lot, 'id'>) => {
     if (lots.some(l => l.code.toUpperCase() === data.code.toUpperCase())) return false;
-    setLots(prev => [{ ...data, id: `l-${Date.now()}` }, ...prev]);
+    setLots(prev => [{ ...data, id: `l-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }, ...prev]);
     notify(`Lotto "${data.code}" aggiunto`, 'SUCCESS');
     return true;
   };
