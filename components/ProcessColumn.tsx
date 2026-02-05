@@ -104,8 +104,9 @@ export const ProcessColumn: React.FC<Props> = ({ calibrationId, selectedId, onSe
         const pallets = getPalletsByProcess(p.id);
         return acc + pallets.reduce((pacc, pal) => pacc + pal.weight, 0);
     }, 0);
-    const raw = calibration?.incomingRawWeight || 1;
-    return { totalProduced: total, yield: (total / raw) * 100 };
+    const raw = calibration?.incomingRawWeight ?? 0;
+    const yieldValue = raw > 0 ? (total / raw) * 100 : 0;
+    return { totalProduced: total, yield: yieldValue };
   }, [calibrationId, getProcessesByCalibration, getPalletsByProcess, calibration?.incomingRawWeight]);
 
   const availableProductTypes = useMemo(() => {
@@ -175,8 +176,22 @@ export const ProcessColumn: React.FC<Props> = ({ calibrationId, selectedId, onSe
                 <div className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><ArrowUpCircle className="w-4 h-4 text-blue-500" /> Carico Grezzo</div>
                 {isLoadingRaw ? (
                     <div className="flex gap-1 animate-in slide-in-from-right-2">
-                        <input autoFocus className="w-20 text-xs border rounded px-2 py-1 outline-none font-mono" type="number" placeholder="Kg" value={rawWeightInput} onChange={e => setRawWeightInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && rawWeightInput && (addIncomingWeight(calibrationId, parseFloat(rawWeightInput)), setRawWeightInput(''), setIsLoadingRaw(false))} />
-                        <button onClick={() => { if(rawWeightInput) { addIncomingWeight(calibrationId, parseFloat(rawWeightInput)); setRawWeightInput(''); setIsLoadingRaw(false); } }} className="bg-blue-600 text-white text-[10px] px-2 rounded font-bold">OK</button>
+                        <input autoFocus className="w-20 text-xs border rounded px-2 py-1 outline-none font-mono" type="number" placeholder="Kg" value={rawWeightInput} onChange={e => setRawWeightInput(e.target.value)} onKeyDown={(e) => {
+                          if (e.key !== 'Enter' || !rawWeightInput) return;
+                          const parsed = parseFloat(rawWeightInput);
+                          if (!Number.isFinite(parsed) || parsed <= 0) return;
+                          addIncomingWeight(calibrationId, parsed);
+                          setRawWeightInput('');
+                          setIsLoadingRaw(false);
+                        }} />
+                        <button onClick={() => {
+                          if (!rawWeightInput) return;
+                          const parsed = parseFloat(rawWeightInput);
+                          if (!Number.isFinite(parsed) || parsed <= 0) return;
+                          addIncomingWeight(calibrationId, parsed);
+                          setRawWeightInput('');
+                          setIsLoadingRaw(false);
+                        }} className="bg-blue-600 text-white text-[10px] px-2 rounded font-bold">OK</button>
                     </div>
                 ) : (
                     <button onClick={() => setIsLoadingRaw(true)} className="text-[10px] bg-white border border-slate-300 hover:bg-slate-50 text-slate-600 px-3 py-1 rounded font-bold transition-all shadow-sm">REGISTRA BIN</button>

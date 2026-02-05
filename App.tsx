@@ -19,7 +19,10 @@ const DashboardContent = () => {
   const [mobileView, setMobileView] = useState<'CALIBRATIONS' | 'PROCESSES' | 'PALLETS'>('CALIBRATIONS');
   
   // Responsive check
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 1024;
+  });
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
