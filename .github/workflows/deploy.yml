@@ -20,24 +20,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Create Env Config
-        run: |
-          echo "window._env_ = { 
-            SUPABASE_URL: '${{ secrets.SUPABASE_URL }}', 
-            SUPABASE_ANON_KEY: '${{ secrets.SUPABASE_ANON_KEY }}' 
-          };" > env-config.js
+      - name: Install dependencies
+        run: npm install
 
-      - name: Inject Env Script
-        run: |
-          sed -i '/<head>/a \    <script src="./env-config.js"></script>' index.html
+      - name: Build
+        env:
+          # Mappiamo i secrets di GitHub nelle variabili d'ambiente che Vite si aspetta
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          # Vite crea la cartella 'dist' come output
+          path: './dist'
 
       - name: Deploy to GitHub Pages
         id: deployment

@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
@@ -8,11 +7,27 @@ import {
 } from '../types';
 import { ToastMessage, ToastType } from '../components/ui/Toast';
 
-// Inizializzazione Supabase
-// Le variabili verranno iniettate dal workflow di deploy o caricate da process.env
-const supabaseUrl = (window as any)._env_?.SUPABASE_URL || '';
-const supabaseKey = (window as any)._env_?.SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Funzione helper per recuperare variabili d'ambiente in modo cross-platform
+const getEnvVar = (name: string): string => {
+  // 1. Prova import.meta.env (Standard Vite)
+  const metaEnv = (import.meta as any).env;
+  if (metaEnv && metaEnv[name]) return metaEnv[name];
+
+  // 2. Prova process.env (Standard Node/Environments)
+  if (typeof process !== 'undefined' && process.env && process.env[name]) {
+    return process.env[name] as string;
+  }
+
+  return '';
+};
+
+const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
+const supabaseKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+
+// Inizializzazione client Supabase
+const supabase = supabaseUrl && supabaseKey 
+  ? createClient(supabaseUrl, supabaseKey) 
+  : null as any;
 
 interface DataContextType {
   calibrations: Calibration[];
@@ -72,8 +87,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch iniziale
   const fetchData = useCallback(async () => {
+    if (!supabase) {
+        console.error("Supabase client not initialized. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.");
+        setLoading(false);
+        return;
+    }
     setLoading(true);
     try {
       const [rm, st, vr, pk, pt, lt, ll, cl, pr, pl] = await Promise.all([
@@ -116,9 +135,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // --- Implementazione Mutazioni Supabase ---
+  // --- Mutazioni ---
 
   const addCalibration = async (data: any) => {
+    if(!supabase) return;
     const { data: res, error } = await supabase.from('calibrations').insert([{
       ...data,
       status: CalibrationStatus.PROGRAMMED,
@@ -131,6 +151,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateCalibrationStatus = async (id: string, status: CalibrationStatus) => {
+    if(!supabase) return;
     const { error } = await supabase.from('calibrations').update({ status }).eq('id', id);
     if (!error) {
       setCalibrations(prev => prev.map(c => c.id === id ? { ...c, status } : c));
@@ -139,6 +160,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addIncomingWeight = async (id: string, weight: number) => {
+    if(!supabase) return;
     const current = calibrations.find(c => c.id === id)?.incomingRawWeight || 0;
     const { error } = await supabase.from('calibrations').update({ incoming_raw_weight: current + weight }).eq('id', id);
     if (!error) {
@@ -147,6 +169,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addProcess = async (data: any) => {
+    if(!supabase) return;
     const { data: res, error } = await supabase.from('processes').insert([{
       ...data,
       start_time: new Date().toISOString(),
@@ -158,6 +181,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const closeProcess = async (id: string) => {
+    if(!supabase) return;
     const { error } = await supabase.from('processes').update({ 
       status: ProcessStatus.CLOSED, 
       end_time: new Date().toISOString() 
@@ -168,6 +192,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addPallet = async (data: any) => {
+    if(!supabase) return;
     const { data: res, error } = await supabase.from('pallets').insert([data]).select();
     if (!error && res) {
       setPallets(prev => [res[0], ...prev]);
@@ -176,12 +201,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deletePallet = async (id: string) => {
+    if(!supabase) return;
     const { error } = await supabase.from('pallets').delete().eq('id', id);
     if (!error) setPallets(prev => prev.filter(p => p.id !== id));
   };
 
-  // Anagrafiche (Esempi)
   const addRawMaterial = async (data: any) => {
+    if(!supabase) return false;
     const { data: res, error } = await supabase.from('raw_materials').insert([data]).select();
     if (!error && res) {
       setRawMaterials(prev => [res[0], ...prev]);
@@ -191,6 +217,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateRawMaterial = async (id: string, data: any) => {
+    if(!supabase) return false;
     const { error } = await supabase.from('raw_materials').update(data).eq('id', id);
     if (!error) {
       setRawMaterials(prev => prev.map(r => r.id === id ? { ...r, ...data } : r));
@@ -200,40 +227,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteRawMaterial = async (id: string) => {
+    if(!supabase) return;
     await supabase.from('raw_materials').delete().eq('id', id);
     setRawMaterials(prev => prev.filter(r => r.id !== id));
   };
 
   const addSubtype = async (name: string, raw_material_id: string) => {
+    if(!supabase) return;
     const { data: res } = await supabase.from('subtypes').insert([{ name, raw_material_id }]).select();
     if (res) setSubtypes(prev => [res[0], ...prev]);
   };
 
   const addVariety = async (data: any) => {
+    if(!supabase) return false;
     const { data: res } = await supabase.from('varieties').insert([data]).select();
     if (res) { setVarieties(prev => [res[0], ...prev]); return true; }
     return false;
   };
 
   const addPackaging = async (data: any) => {
+    if(!supabase) return false;
     const { data: res } = await supabase.from('packagings').insert([data]).select();
     if (res) { setPackagings(prev => [res[0], ...prev]); return true; }
     return false;
   };
 
   const addProductType = async (data: any) => {
+    if(!supabase) return false;
     const { data: res } = await supabase.from('product_types').insert([data]).select();
     if (res) { setProductTypes(prev => [res[0], ...prev]); return true; }
     return false;
   };
 
   const addLot = async (data: any) => {
+    if(!supabase) return false;
     const { data: res } = await supabase.from('lots').insert([data]).select();
     if (res) { setLots(prev => [res[0], ...prev]); return true; }
     return false;
   };
 
   const addLabelLayout = async (name: string) => {
+    if(!supabase) return null;
     const { data: res } = await supabase.from('label_layouts').insert([{
         name, is_default: labelLayouts.length === 0, width: 400, height: 600, elements: []
     }]).select();
@@ -245,18 +279,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateLabelLayout = async (id: string, updates: Partial<LabelLayout>) => {
+    if(!supabase) return;
     const { error } = await supabase.from('label_layouts').update(updates).eq('id', id);
     if (!error) setLabelLayouts(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
   };
 
   const setDefaultLabelLayout = async (id: string) => {
+    if(!supabase) return;
     await supabase.from('label_layouts').update({ is_default: false }).neq('id', id);
     await supabase.from('label_layouts').update({ is_default: true }).eq('id', id);
     setLabelLayouts(prev => prev.map(l => ({ ...l, is_default: l.id === id })));
   };
 
-  const getProcessesByCalibration = useCallback((id: string) => processes.filter(p => p.calibration_id === id), [processes]);
-  const getPalletsByProcess = useCallback((id: string) => pallets.filter(p => p.process_id === id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()), [pallets]);
+  const getProcessesByCalibration = useCallback((id: string) => processes.filter(p => (p as any).calibration_id === id || p.calibrationId === id), [processes]);
+  const getPalletsByProcess = useCallback((id: string) => pallets.filter(p => (p as any).process_id === id || p.processId === id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()), [pallets]);
 
   return (
     <DataContext.Provider value={{
