@@ -172,10 +172,10 @@ export const canHardDeleteSubtype = (
   id: string,
   refs: { varieties: Variety[]; lots: Lot[]; calibrations: Calibration[]; productTypes: ProductType[] }
 ): ValidationResult => {
-  const used = refs.varieties.some(v => v.subtypeId === id)
-    || refs.lots.some(l => l.subtypeId === id)
+  const used = refs.varieties.some(v => !v.isDeleted && v.subtypeId === id)
+    || refs.lots.some(l => !l.isDeleted && l.subtypeId === id)
     || refs.calibrations.some(c => c.subtypeId === id)
-    || refs.productTypes.some(pt => pt.subtypeId === id);
+    || refs.productTypes.some(pt => !pt.isDeleted && pt.subtypeId === id);
   if (used) return { ok: false, code: 'SUBTYPE_IN_USE', message: 'Impossibile eliminare definitivamente: tipologia in uso' };
   return ok();
 };
@@ -184,9 +184,9 @@ export const canHardDeleteVariety = (
   id: string,
   refs: { lots: Lot[]; calibrations: Calibration[]; productTypes: ProductType[] }
 ): ValidationResult => {
-  const used = refs.lots.some(l => l.varietyId === id)
+  const used = refs.lots.some(l => !l.isDeleted && l.varietyId === id)
     || refs.calibrations.some(c => c.varietyId === id)
-    || refs.productTypes.some(pt => pt.varietyId === id);
+    || refs.productTypes.some(pt => !pt.isDeleted && pt.varietyId === id);
   if (used) return { ok: false, code: 'VARIETY_IN_USE', message: 'Impossibile eliminare definitivamente: varietà in uso' };
   return ok();
 };
