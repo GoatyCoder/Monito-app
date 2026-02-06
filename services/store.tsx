@@ -6,11 +6,13 @@ import {
 } from '../types';
 import { ToastMessage, ToastType } from '../components/ui/Toast';
 import {
+  ok,
   canHardDeleteLot,
   canHardDeleteProductType,
   canHardDeleteSubtype,
   canHardDeleteVariety,
   normalizeCode,
+  ValidationResult,
   validateLotRelations,
   validateProductType,
   validateProductTypeRelations,
@@ -49,8 +51,8 @@ interface DataContextType {
   addPallet: (data: Omit<Pallet, 'id' | 'timestamp'>) => void;
   deletePallet: (id: string) => void;
 
-  addRawMaterial: (data: RawMaterialInput) => boolean;
-  updateRawMaterial: (id: string, data: RawMaterialInput) => boolean;
+  addRawMaterial: (data: RawMaterialInput) => ValidationResult;
+  updateRawMaterial: (id: string, data: RawMaterialInput) => ValidationResult;
   deleteRawMaterial: (id: string) => void;
   hardDeleteRawMaterial: (id: string) => void;
   restoreRawMaterial: (id: string) => void;
@@ -61,26 +63,26 @@ interface DataContextType {
   hardDeleteSubtype: (id: string) => void;
   restoreSubtype: (id: string) => void;
 
-  addVariety: (data: VarietyInput) => boolean;
-  updateVariety: (id: string, data: VarietyInput) => boolean;
+  addVariety: (data: VarietyInput) => ValidationResult;
+  updateVariety: (id: string, data: VarietyInput) => ValidationResult;
   deleteVariety: (id: string) => void;
   hardDeleteVariety: (id: string) => void;
   restoreVariety: (id: string) => void;
 
-  addPackaging: (data: PackagingInput) => boolean;
-  updatePackaging: (id: string, data: PackagingInput) => boolean;
+  addPackaging: (data: PackagingInput) => ValidationResult;
+  updatePackaging: (id: string, data: PackagingInput) => ValidationResult;
   deletePackaging: (id: string) => void;
   hardDeletePackaging: (id: string) => void;
   restorePackaging: (id: string) => void;
 
-  addProductType: (data: ProductTypeInput) => boolean;
-  updateProductType: (id: string, data: ProductTypeInput) => boolean;
+  addProductType: (data: ProductTypeInput) => ValidationResult;
+  updateProductType: (id: string, data: ProductTypeInput) => ValidationResult;
   deleteProductType: (id: string) => void;
   hardDeleteProductType: (id: string) => void;
   restoreProductType: (id: string) => void;
 
-  addLot: (data: LotInput) => boolean;
-  updateLot: (id: string, data: LotInput) => boolean;
+  addLot: (data: LotInput) => ValidationResult;
+  updateLot: (id: string, data: LotInput) => ValidationResult;
   deleteLot: (id: string) => void;
   hardDeleteLot: (id: string) => void;
   restoreLot: (id: string) => void;
@@ -305,24 +307,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addRawMaterial = (data: RawMaterialInput) => {
     const required = validateRequiredCode(data.code, 'grezzo');
-    if (!required.ok) return false;
+    if (!required.ok) return required;
     const unique = validateUniqueCode(rawMaterialsState, data.code);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
 
     setRawMaterialsState(prev => [{ id: genId('rm'), ...data, code: normalizeCode(data.code), calibers: data.calibers || [], isDeleted: false, createdAt: nowIso(), updatedAt: nowIso() }, ...prev]);
     notify(`Grezzo "${data.name}" aggiunto`, 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const updateRawMaterial = (id: string, data: RawMaterialInput) => {
     const required = validateRequiredCode(data.code, 'grezzo');
-    if (!required.ok) return false;
+    if (!required.ok) return required;
     const unique = validateUniqueCode(rawMaterialsState, data.code, id);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
 
     setRawMaterialsState(prev => prev.map(i => i.id === id ? { ...i, ...data, code: normalizeCode(data.code), updatedAt: nowIso() } : i));
     notify('Grezzo aggiornato', 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const deleteRawMaterial = (id: string) => {
@@ -406,28 +408,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addVariety = (data: VarietyInput) => {
     const required = validateRequiredCode(data.code, 'varietà');
-    if (!required.ok) return false;
+    if (!required.ok) return required;
     const unique = validateUniqueCode(varietiesState, data.code);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
     const relation = validateVarietyRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState });
-    if (!relation.ok) return false;
+    if (!relation.ok) return relation;
 
     setVarietiesState(prev => [{ id: genId('v'), ...data, code: normalizeCode(data.code), isDeleted: false, createdAt: nowIso(), updatedAt: nowIso() }, ...prev]);
     notify(`Varietà "${data.name}" aggiunta`, 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const updateVariety = (id: string, data: VarietyInput) => {
     const required = validateRequiredCode(data.code, 'varietà');
-    if (!required.ok) return false;
+    if (!required.ok) return required;
     const unique = validateUniqueCode(varietiesState, data.code, id);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
     const relation = validateVarietyRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState });
-    if (!relation.ok) return false;
+    if (!relation.ok) return relation;
 
     setVarietiesState(prev => prev.map(i => i.id === id ? { ...i, ...data, code: normalizeCode(data.code), updatedAt: nowIso() } : i));
     notify('Varietà aggiornata', 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const deleteVariety = (id: string) => {
@@ -458,24 +460,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addPackaging = (data: PackagingInput) => {
     const required = validateRequiredCode(data.code, 'imballaggio');
-    if (!required.ok) return false;
+    if (!required.ok) return required;
     const unique = validateUniqueCode(packagingsState, data.code);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
 
     setPackagingsState(prev => [{ id: genId('pkg'), ...data, code: normalizeCode(data.code), isDeleted: false, createdAt: nowIso(), updatedAt: nowIso() }, ...prev]);
     notify(`Imballaggio "${data.name}" aggiunto`, 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const updatePackaging = (id: string, data: PackagingInput) => {
     const required = validateRequiredCode(data.code, 'imballaggio');
-    if (!required.ok) return false;
+    if (!required.ok) return required;
     const unique = validateUniqueCode(packagingsState, data.code, id);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
 
     setPackagingsState(prev => prev.map(i => i.id === id ? { ...i, ...data, code: normalizeCode(data.code), updatedAt: nowIso() } : i));
     notify('Imballaggio aggiornato', 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const deletePackaging = (id: string) => {
@@ -505,32 +507,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addProductType = (data: ProductTypeInput) => {
     const required = validateRequiredCode(data.code, 'lavorato');
-    if (!required.ok) return false;
+    if (!required.ok) return required;
     const unique = validateUniqueCode(productTypesState, data.code);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
     const valid = validateProductType(data);
-    if (!valid.ok) return false;
+    if (!valid.ok) return valid;
     const relation = validateProductTypeRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState, varieties: varietiesState });
-    if (!relation.ok) return false;
+    if (!relation.ok) return relation;
 
     setProductTypesState(prev => [{ ...data, id: genId('pt'), code: normalizeCode(data.code), isDeleted: false, createdAt: nowIso(), updatedAt: nowIso() }, ...prev]);
     notify(`Articolo "${data.name}" aggiunto`, 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const updateProductType = (id: string, data: ProductTypeInput) => {
     const required = validateRequiredCode(data.code, 'lavorato');
-    if (!required.ok) return false;
+    if (!required.ok) return required;
     const unique = validateUniqueCode(productTypesState, data.code, id);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
     const valid = validateProductType(data);
-    if (!valid.ok) return false;
+    if (!valid.ok) return valid;
     const relation = validateProductTypeRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState, varieties: varietiesState });
-    if (!relation.ok) return false;
+    if (!relation.ok) return relation;
 
     setProductTypesState(prev => prev.map(i => i.id === id ? { ...i, ...data, code: normalizeCode(data.code), updatedAt: nowIso() } : i));
     notify('Articolo aggiornato', 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const deleteProductType = (id: string) => {
@@ -560,28 +562,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addLot = (data: LotInput) => {
     const lotCodeRequired = validateRequiredCode(data.code, 'lotto');
-    if (!lotCodeRequired.ok) return false;
+    if (!lotCodeRequired.ok) return lotCodeRequired;
     const unique = validateUniqueCode(lotsState, data.code);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
     const relation = validateLotRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState, varieties: varietiesState });
-    if (!relation.ok) return false;
+    if (!relation.ok) return relation;
 
     setLotsState(prev => [{ ...data, id: genId('l'), code: normalizeCode(data.code), isDeleted: false, createdAt: nowIso(), updatedAt: nowIso() }, ...prev]);
     notify(`Lotto "${data.code}" aggiunto`, 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const updateLot = (id: string, data: LotInput) => {
     const lotCodeRequired = validateRequiredCode(data.code, 'lotto');
-    if (!lotCodeRequired.ok) return false;
+    if (!lotCodeRequired.ok) return lotCodeRequired;
     const unique = validateUniqueCode(lotsState, data.code, id);
-    if (!unique.ok) return false;
+    if (!unique.ok) return unique;
     const relation = validateLotRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState, varieties: varietiesState });
-    if (!relation.ok) return false;
+    if (!relation.ok) return relation;
 
     setLotsState(prev => prev.map(i => i.id === id ? { ...i, ...data, code: normalizeCode(data.code), updatedAt: nowIso() } : i));
     notify('Lotto aggiornato', 'SUCCESS');
-    return true;
+    return ok();
   };
 
   const deleteLot = (id: string) => {
