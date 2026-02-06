@@ -4,6 +4,7 @@ import { useData } from '../services/store';
 import { Trash2, Tag, Scale, Boxes, Sparkles, Pencil, X, Hash, Search, ChevronLeft, ChevronRight, AlertCircle, Barcode, Printer, Plus, ArrowRight } from 'lucide-react';
 import { WeightType, ProductQuality, ProductNature } from '../types';
 import { LabelEditor } from './LabelEditor'; // Import the new editor
+import { ValidationResult } from '../services/domain/registryValidation';
 
 type Tab = 'GREZZI' | 'TIPOLOGIE' | 'VARIETA' | 'IMBALLAGGI' | 'LAVORATI' | 'LOTTI' | 'ETICHETTA';
 
@@ -22,6 +23,7 @@ export const RegistryManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('GREZZI');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationField, setValidationField] = useState<string | null>(null);
   
   // Filtering & Pagination State
   const [searchTerm, setSearchTerm] = useState('');
@@ -72,6 +74,7 @@ export const RegistryManager: React.FC = () => {
     setSearchTerm('');
     setCurrentPage(1);
     setValidationError(null);
+    setValidationField(null);
   }, [activeTab]);
 
   useEffect(() => {
@@ -80,7 +83,7 @@ export const RegistryManager: React.FC = () => {
 
   const cancelEdit = () => {
     setEditingId(null);
-    setValidationError(null);
+    setValidationError(null); setValidationField(null);
     setNewRawMaterial('');
     setNewRawCode('');
     setNewRawCalibers([]);
@@ -148,14 +151,14 @@ export const RegistryManager: React.FC = () => {
       setNewRawMaterial(rm.name); 
       setNewRawCode(rm.code); 
       setNewRawCalibers(rm.calibers || []);
-      setValidationError(null); 
+      setValidationError(null); setValidationField(null); 
   };
-  const handleEditSubtype = (st: any) => { setEditingId(st.id); setNewSubtypeName(st.name); setNewSubtypeRawId(st.rawMaterialId); setValidationError(null); };
-  const handleEditVariety = (v: any) => { setEditingId(v.id); setNewVarietyName(v.name); setNewVarietyCode(v.code); setNewVarietyRawId(v.rawMaterialId); setNewVarietySubtypeId(v.subtypeId || ''); setValidationError(null); };
-  const handleEditPkg = (pkg: any) => { setEditingId(pkg.id); setNewPkgName(pkg.name); setNewPkgCode(pkg.code); setValidationError(null); };
+  const handleEditSubtype = (st: any) => { setEditingId(st.id); setNewSubtypeName(st.name); setNewSubtypeRawId(st.rawMaterialId); setValidationError(null); setValidationField(null); };
+  const handleEditVariety = (v: any) => { setEditingId(v.id); setNewVarietyName(v.name); setNewVarietyCode(v.code); setNewVarietyRawId(v.rawMaterialId); setNewVarietySubtypeId(v.subtypeId || ''); setValidationError(null); setValidationField(null); };
+  const handleEditPkg = (pkg: any) => { setEditingId(pkg.id); setNewPkgName(pkg.name); setNewPkgCode(pkg.code); setValidationError(null); setValidationField(null); };
   const handleEditPt = (pt: any) => {
     setEditingId(pt.id);
-    setValidationError(null);
+    setValidationError(null); setValidationField(null);
     setPtForm({
         code: pt.code, name: pt.name, nature: pt.nature, quality: pt.quality, ean: pt.ean || '',
         weightType: pt.weightType, standardWeight: pt.standardWeight?.toString() || '',
@@ -164,7 +167,7 @@ export const RegistryManager: React.FC = () => {
   };
   const handleEditLot = (l: any) => {
       setEditingId(l.id);
-      setValidationError(null);
+      setValidationError(null); setValidationField(null);
       setLotForm({
           code: l.code,
           rawMaterialId: l.rawMaterialId,
@@ -183,11 +186,22 @@ export const RegistryManager: React.FC = () => {
         code, 
         calibers: newRawCalibers // Save calibers
     };
-    const success = editingId ? updateRawMaterial(editingId, payload) : addRawMaterial(payload);
-    if (!success) setValidationError(`Codice "${code}" già esistente!`);
-    else cancelEdit();
+    const result = editingId ? updateRawMaterial(editingId, payload) : addRawMaterial(payload);
+    handleValidationResult(result);
   };
 
+
+
+  const handleValidationResult = (result: ValidationResult) => {
+    if (!result.ok) {
+      setValidationError(result.message);
+      setValidationField(result.field || null);
+      return;
+    }
+    cancelEdit();
+  };
+
+  const withFieldHighlight = (baseClass: string, field: string) => (`${baseClass} ${validationField === field ? 'border-red-400 ring-2 ring-red-200' : ''}`).trim();
   const addCaliber = () => {
       if (tempCaliberInput.trim()) {
           setNewRawCalibers([...newRawCalibers, tempCaliberInput.trim().toUpperCase()]);
@@ -212,18 +226,16 @@ export const RegistryManager: React.FC = () => {
     e.preventDefault(); 
     const code = newVarietyCode.trim().toUpperCase();
     const payload = { name: newVarietyName.trim(), code, rawMaterialId: newVarietyRawId, subtypeId: newVarietySubtypeId || undefined };
-    const success = editingId ? updateVariety(editingId, payload) : addVariety(payload);
-    if (!success) setValidationError(`Codice "${code}" già esistente!`);
-    else cancelEdit();
+    const result = editingId ? updateVariety(editingId, payload) : addVariety(payload);
+    handleValidationResult(result);
   };
 
   const handleAddPkg = (e: React.FormEvent) => { 
     e.preventDefault(); 
     const code = newPkgCode.trim().toUpperCase();
     const payload = { name: newPkgName.trim(), code };
-    const success = editingId ? updatePackaging(editingId, payload) : addPackaging(payload);
-    if (!success) setValidationError(`Codice "${code}" già esistente!`);
-    else cancelEdit();
+    const result = editingId ? updatePackaging(editingId, payload) : addPackaging(payload);
+    handleValidationResult(result);
   };
 
   const handleAddPt = (e: React.FormEvent) => {
@@ -239,9 +251,8 @@ export const RegistryManager: React.FC = () => {
         subtypeId: ptForm.subtypeId || undefined,
         varietyId: ptForm.varietyId || undefined
     };
-    const success = editingId ? updateProductType(editingId, payload) : addProductType(payload);
-    if (!success) setValidationError(`Codice "${code}" già esistente!`);
-    else cancelEdit();
+    const result = editingId ? updateProductType(editingId, payload) : addProductType(payload);
+    handleValidationResult(result);
   };
 
   const handleAddLot = (e: React.FormEvent) => {
@@ -254,9 +265,8 @@ export const RegistryManager: React.FC = () => {
           varietyId: lotForm.varietyId,
           notes: lotForm.notes || undefined
       };
-      const success = editingId ? updateLot(editingId, payload) : addLot(payload);
-      if (!success) setValidationError(`Codice Lotto "${code}" già esistente!`);
-      else cancelEdit();
+      const result = editingId ? updateLot(editingId, payload) : addLot(payload);
+      handleValidationResult(result);
   };
 
   const TabButton = ({ id, label }: { id: Tab, label: string }) => (
@@ -367,7 +377,7 @@ export const RegistryManager: React.FC = () => {
                                 <h3 className="text-sm font-bold text-slate-500 uppercase mb-3">{editingId ? 'Modifica Grezzo' : 'Aggiungi Grezzo'}</h3>
                                 <form onSubmit={handleAddRawMaterial} className="space-y-4">
                                     <div className="flex gap-2">
-                                        <input className="w-32 border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase" placeholder="Codice (MND)" value={newRawCode} onChange={e => { setNewRawCode(e.target.value); setValidationError(null); }} required />
+                                        <input className={withFieldHighlight("w-32 border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase", "code")} placeholder="Codice (MND)" value={newRawCode} onChange={e => { setNewRawCode(e.target.value); setValidationError(null); setValidationField(null); }} required />
                                         <input className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Nome (Es. Mandarini)" value={newRawMaterial} onChange={e => setNewRawMaterial(e.target.value)} required />
                                     </div>
                                     
@@ -466,7 +476,7 @@ export const RegistryManager: React.FC = () => {
                                     </div>
                                     <div className="col-span-2">
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Codice</label>
-                                        <input className="w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono uppercase" placeholder="NAD" value={newVarietyCode} onChange={e => { setNewVarietyCode(e.target.value); setValidationError(null); }} required />
+                                        <input className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono uppercase", "code")} placeholder="NAD" value={newVarietyCode} onChange={e => { setNewVarietyCode(e.target.value); setValidationError(null); setValidationField(null); }} required />
                                     </div>
                                     <div className="col-span-4">
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Nome Varietà</label>
@@ -493,7 +503,7 @@ export const RegistryManager: React.FC = () => {
                             <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                                 <h3 className="text-sm font-bold text-slate-500 uppercase mb-3">{editingId ? 'Modifica Imballaggio' : 'Aggiungi Imballaggio'}</h3>
                                 <form onSubmit={handleAddPkg} className="flex gap-2">
-                                    <input className="w-32 border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase" placeholder="C34" value={newPkgCode} onChange={e => { setNewPkgCode(e.target.value); setValidationError(null); }} required />
+                                    <input className={withFieldHighlight("w-32 border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase", "code")} placeholder="C34" value={newPkgCode} onChange={e => { setNewPkgCode(e.target.value); setValidationError(null); setValidationField(null); }} required />
                                     <input className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="Es. Cassetta 30x40..." value={newPkgName} onChange={e => setNewPkgName(e.target.value)} required />
                                     <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">{editingId ? 'Aggiorna' : 'Aggiungi'}</button>
                                     {editingId && <button type="button" onClick={cancelEdit} className="p-2 text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>}
@@ -517,7 +527,7 @@ export const RegistryManager: React.FC = () => {
                                 <div className="grid grid-cols-12 gap-3">
                                     <div className="col-span-12 md:col-span-2">
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Codice</label>
-                                        <input required className="w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono uppercase" placeholder="M12" value={ptForm.code} onChange={e => { setPtForm({...ptForm, code: e.target.value}); setValidationError(null); }} />
+                                        <input required className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono uppercase", "code")} placeholder="M12" value={ptForm.code} onChange={e => { setPtForm({...ptForm, code: e.target.value}); setValidationError(null); setValidationField(null); }} />
                                     </div>
                                     <div className="col-span-12 md:col-span-6">
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Nome Articolo</label>
@@ -548,7 +558,7 @@ export const RegistryManager: React.FC = () => {
                                     </div>
                                     <div className="col-span-12 md:col-span-2">
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Peso Std</label>
-                                        <input disabled={ptForm.weightType !== WeightType.EGALIZZATO} className="w-full border border-slate-300 rounded px-3 py-2 text-sm disabled:bg-slate-50" type="number" step="0.01" value={ptForm.standardWeight} onChange={e => setPtForm({...ptForm, standardWeight: e.target.value})} />
+                                        <input disabled={ptForm.weightType !== WeightType.EGALIZZATO} className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-2 text-sm disabled:bg-slate-50", "standardWeight")} type="number" step="0.01" value={ptForm.standardWeight} onChange={e => setPtForm({...ptForm, standardWeight: e.target.value})} />
                                     </div>
                                 </div>
 
@@ -557,21 +567,21 @@ export const RegistryManager: React.FC = () => {
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Grezzo</label>
-                                            <select className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs bg-white" value={ptForm.rawMaterialId} onChange={e => setPtForm({...ptForm, rawMaterialId: e.target.value, subtypeId: '', varietyId: ''})}>
+                                            <select className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-1.5 text-xs bg-white", "rawMaterialId")} value={ptForm.rawMaterialId} onChange={e => setPtForm({...ptForm, rawMaterialId: e.target.value, subtypeId: '', varietyId: ''})}>
                                                 <option value="">Qualsiasi</option>
                                                 {rawMaterials.map(rm => <option key={rm.id} value={rm.id}>{rm.name}</option>)}
                                             </select>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Tipologia</label>
-                                            <select disabled={!ptForm.rawMaterialId} className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs bg-white disabled:opacity-50" value={ptForm.subtypeId} onChange={e => setPtForm({...ptForm, subtypeId: e.target.value})}>
+                                            <select disabled={!ptForm.rawMaterialId} className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-1.5 text-xs bg-white disabled:opacity-50", "subtypeId")} value={ptForm.subtypeId} onChange={e => setPtForm({...ptForm, subtypeId: e.target.value})}>
                                                 <option value="">Qualsiasi</option>
                                                 {subtypes.filter(s => s.rawMaterialId === ptForm.rawMaterialId).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                             </select>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Varietà</label>
-                                            <select disabled={!ptForm.rawMaterialId} className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs bg-white disabled:opacity-50" value={ptForm.varietyId} onChange={e => setPtForm({...ptForm, varietyId: e.target.value})}>
+                                            <select disabled={!ptForm.rawMaterialId} className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-1.5 text-xs bg-white disabled:opacity-50", "varietyId")} value={ptForm.varietyId} onChange={e => setPtForm({...ptForm, varietyId: e.target.value})}>
                                                 <option value="">Qualsiasi</option>
                                                 {varieties.filter(v => v.rawMaterialId === ptForm.rawMaterialId).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                                             </select>
@@ -636,11 +646,11 @@ export const RegistryManager: React.FC = () => {
                                 <div className="grid grid-cols-12 gap-3 items-end">
                                     <div className="col-span-12 md:col-span-2">
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Sigla Lotto</label>
-                                        <input required className="w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono uppercase bg-yellow-50" placeholder="14002" value={lotForm.code} onChange={e => { setLotForm({...lotForm, code: e.target.value}); setValidationError(null); }} />
+                                        <input required className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono uppercase bg-yellow-50", "code")} placeholder="14002" value={lotForm.code} onChange={e => { setLotForm({...lotForm, code: e.target.value}); setValidationError(null); setValidationField(null); }} />
                                     </div>
                                     <div className="col-span-12 md:col-span-3">
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Grezzo</label>
-                                        <select required className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white" value={lotForm.rawMaterialId} onChange={e => setLotForm({...lotForm, rawMaterialId: e.target.value, subtypeId: '', varietyId: ''})}>
+                                        <select required className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white", "rawMaterialId")} value={lotForm.rawMaterialId} onChange={e => setLotForm({...lotForm, rawMaterialId: e.target.value, subtypeId: '', varietyId: ''})}>
                                             <option value="">Seleziona...</option>
                                             {rawMaterials.map(rm => <option key={rm.id} value={rm.id}>{rm.name}</option>)}
                                         </select>
@@ -649,7 +659,7 @@ export const RegistryManager: React.FC = () => {
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Tipologia</label>
                                         <select 
                                             required
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white disabled:bg-slate-50" 
+                                            className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white disabled:bg-slate-50", "subtypeId")} 
                                             value={lotForm.subtypeId} 
                                             onChange={e => setLotForm({...lotForm, subtypeId: e.target.value})} 
                                             disabled={!lotForm.rawMaterialId || isLotSubtypeLocked}
@@ -662,7 +672,7 @@ export const RegistryManager: React.FC = () => {
                                         <label className="block text-xs font-medium text-slate-500 mb-1">Varietà</label>
                                         <select 
                                             required
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white disabled:bg-slate-50" 
+                                            className={withFieldHighlight("w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white disabled:bg-slate-50", "varietyId")} 
                                             value={lotForm.varietyId} 
                                             onChange={e => {
                                                 const vId = e.target.value;
