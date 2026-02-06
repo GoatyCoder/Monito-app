@@ -5,7 +5,20 @@ import {
   Lot, LabelLayout
 } from '../types';
 import { ToastMessage, ToastType } from '../components/ui/Toast';
-import { normalizeCode, validateLotRelations, validateProductType, validateRequiredCode, validateUniqueCode } from './domain/registryValidation';
+import {
+  canHardDeleteLot,
+  canHardDeleteProductType,
+  canHardDeleteSubtype,
+  canHardDeleteVariety,
+  normalizeCode,
+  validateLotRelations,
+  validateProductType,
+  validateProductTypeRelations,
+  validateRequiredCode,
+  validateSubtypeRelations,
+  validateUniqueCode,
+  validateVarietyRelations,
+} from './domain/registryValidation';
 
 type RawMaterialInput = Omit<RawMaterial, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt' | 'updatedAt'>;
 type VarietyInput = Omit<Variety, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt' | 'updatedAt'>;
@@ -344,11 +357,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addSubtype = (name: string, rawMaterialId: string) => {
+    const relation = validateSubtypeRelations({ rawMaterialId }, { rawMaterials: rawMaterialsState });
+    if (!relation.ok) return;
+
     setSubtypesState(prev => [{ id: genId('st'), name, rawMaterialId, isDeleted: false, createdAt: nowIso(), updatedAt: nowIso() }, ...prev]);
     notify(`Tipologia "${name}" aggiunta`, 'SUCCESS');
   };
 
   const updateSubtype = (id: string, name: string, rawMaterialId: string) => {
+    const relation = validateSubtypeRelations({ rawMaterialId }, { rawMaterials: rawMaterialsState });
+    if (!relation.ok) return;
+
     setSubtypesState(prev => prev.map(i => i.id === id ? { ...i, name, rawMaterialId, updatedAt: nowIso() } : i));
     notify('Tipologia aggiornata', 'SUCCESS');
   };
@@ -371,10 +390,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hardDeleteSubtype = (id: string) => {
-    const inUse = varietiesState.some(v => v.subtypeId === id && !v.isDeleted)
-      || lotsState.some(l => l.subtypeId === id && !l.isDeleted)
-      || calibrations.some(c => c.subtypeId === id);
-    if (inUse) {
+    const canDelete = canHardDeleteSubtype(id, {
+      varieties: varietiesState,
+      lots: lotsState,
+      calibrations,
+      productTypes: productTypesState,
+    });
+    if (!canDelete.ok) {
       notify('Hard delete non consentito: tipologia referenziata', 'ERROR');
       return;
     }
@@ -387,6 +409,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!required.ok) return false;
     const unique = validateUniqueCode(varietiesState, data.code);
     if (!unique.ok) return false;
+    const relation = validateVarietyRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState });
+    if (!relation.ok) return false;
 
     setVarietiesState(prev => [{ id: genId('v'), ...data, code: normalizeCode(data.code), isDeleted: false, createdAt: nowIso(), updatedAt: nowIso() }, ...prev]);
     notify(`Varietà "${data.name}" aggiunta`, 'SUCCESS');
@@ -398,6 +422,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!required.ok) return false;
     const unique = validateUniqueCode(varietiesState, data.code, id);
     if (!unique.ok) return false;
+    const relation = validateVarietyRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState });
+    if (!relation.ok) return false;
 
     setVarietiesState(prev => prev.map(i => i.id === id ? { ...i, ...data, code: normalizeCode(data.code), updatedAt: nowIso() } : i));
     notify('Varietà aggiornata', 'SUCCESS');
@@ -421,8 +447,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hardDeleteVariety = (id: string) => {
-    const inUse = lotsState.some(l => l.varietyId === id && !l.isDeleted) || calibrations.some(c => c.varietyId === id);
-    if (inUse) {
+    const canDelete = canHardDeleteVariety(id, { lots: lotsState, calibrations, productTypes: productTypesState });
+    if (!canDelete.ok) {
       notify('Hard delete non consentito: varietà referenziata', 'ERROR');
       return;
     }
@@ -484,6 +510,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!unique.ok) return false;
     const valid = validateProductType(data);
     if (!valid.ok) return false;
+    const relation = validateProductTypeRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState, varieties: varietiesState });
+    if (!relation.ok) return false;
 
     setProductTypesState(prev => [{ ...data, id: genId('pt'), code: normalizeCode(data.code), isDeleted: false, createdAt: nowIso(), updatedAt: nowIso() }, ...prev]);
     notify(`Articolo "${data.name}" aggiunto`, 'SUCCESS');
@@ -497,6 +525,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!unique.ok) return false;
     const valid = validateProductType(data);
     if (!valid.ok) return false;
+    const relation = validateProductTypeRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState, varieties: varietiesState });
+    if (!relation.ok) return false;
 
     setProductTypesState(prev => prev.map(i => i.id === id ? { ...i, ...data, code: normalizeCode(data.code), updatedAt: nowIso() } : i));
     notify('Articolo aggiornato', 'SUCCESS');
@@ -519,8 +549,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hardDeleteProductType = (id: string) => {
-    const inUse = processes.some(p => p.productTypeId === id);
-    if (inUse) {
+    const canDelete = canHardDeleteProductType(id, { processes });
+    if (!canDelete.ok) {
       notify('Hard delete non consentito: articolo referenziato', 'ERROR');
       return;
     }
@@ -570,8 +600,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hardDeleteLot = (id: string) => {
-    const inUse = calibrations.some(c => c.lotId === id);
-    if (inUse) {
+    const canDelete = canHardDeleteLot(id, { calibrations });
+    if (!canDelete.ok) {
       notify('Hard delete non consentito: lotto referenziato', 'ERROR');
       return;
     }
