@@ -2,8 +2,9 @@
 import React, { useState, useRef } from 'react';
 import { useData } from '../services/store';
 import { Calibration, CalibrationStatus, ProcessStatus } from '../types';
-import { Plus, Search, Layers, ChevronRight, Copy, Keyboard, X, Barcode, Check } from 'lucide-react';
+import { Plus, Search, Layers, ChevronRight, Copy, Keyboard, X, Barcode, Check, Pencil, Trash2 } from 'lucide-react';
 import { StatusBadge } from './ui/Badge';
+import { ConfirmModal, FormModal } from './ui/Modal';
 
 interface Props {
   selectedId: string | null;
@@ -11,10 +12,18 @@ interface Props {
 }
 
 export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => {
-  const { calibrations, addCalibration, duplicateCalibration, processes, pallets, rawMaterials, subtypes, varieties, lots } = useData();
+  const { calibrations, addCalibration, updateCalibration, deleteCalibration, duplicateCalibration, processes, pallets, rawMaterials, subtypes, varieties, lots, addLot, notify } = useData();
   const [filter, setFilter] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState<Calibration | null>(null);
+  const [editingCalibration, setEditingCalibration] = useState<Calibration | null>(null);
+  const [editLotCode, setEditLotCode] = useState('');
+  const [editRawMaterialId, setEditRawMaterialId] = useState('');
+  const [editSubtypeId, setEditSubtypeId] = useState('');
+  const [editVarietyId, setEditVarietyId] = useState('');
+  const [editProducer, setEditProducer] = useState('');
+  const [lotConflictWarning, setLotConflictWarning] = useState<string | null>(null);
+  const [deleteCalibrationId, setDeleteCalibrationId] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -92,7 +101,8 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
 
   const filteredCalibrations = calibrations.filter(c => 
     c.rawMaterial.toLowerCase().includes(filter.toLowerCase()) ||
-    c.producer.toLowerCase().includes(filter.toLowerCase())
+    c.producer.toLowerCase().includes(filter.toLowerCase()) ||
+    (c.lotCode || '').toLowerCase().includes(filter.toLowerCase())
   );
 
   const handleAddSubmit = (e: React.FormEvent) => {
@@ -152,6 +162,110 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
     const v = varieties.find(x => x.id === formData.varietyId);
     return !!v?.subtypeId;
   }, [formData.varietyId, varieties]);
+
+
+  const handleQuickEditCalibration = (cal: Calibration, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingCalibration(cal);
+    setEditLotCode((cal.lotCode || '').toUpperCase());
+    setEditRawMaterialId(cal.rawMaterialId || '');
+    setEditSubtypeId(cal.subtypeId || '');
+    setEditVarietyId(cal.varietyId || '');
+    setEditProducer(cal.producer || '');
+    setLotConflictWarning(null);
+  };
+
+  const closeEditModal = () => {
+    setEditingCalibration(null);
+    setLotConflictWarning(null);
+  };
+
+  const handleEditCalibrationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCalibration) return;
+
+    const normalizedLotCode = editLotCode.trim().toUpperCase();
+    const producer = editProducer.trim();
+
+    if (!normalizedLotCode) {
+      setLotConflictWarning('La sigla lotto è obbligatoria.');
+      return;
+    }
+
+    if (!editRawMaterialId || !editVarietyId || !producer) {
+      setLotConflictWarning('Compila grezzo, varietà e produttore.');
+      return;
+    }
+
+    const existingLot = lots.find(l => l.code.toUpperCase() === normalizedLotCode);
+
+    if (existingLot) {
+      const hasConflict = existingLot.rawMaterialId !== editRawMaterialId
+        || existingLot.varietyId !== editVarietyId
+        || (existingLot.subtypeId || '') !== (editSubtypeId || '')
+        || existingLot.producer.trim().toUpperCase() !== producer.toUpperCase();
+
+      if (hasConflict) {
+        const rawName = rawMaterials.find(r => r.id === existingLot.rawMaterialId)?.name || '-';
+        const varietyName = varieties.find(v => v.id === existingLot.varietyId)?.name || '-';
+        setLotConflictWarning(`Attenzione: il lotto ${normalizedLotCode} esiste già con dati diversi (Grezzo: ${rawName}, Varietà: ${varietyName}, Produttore: ${existingLot.producer}).`);
+        notify('Conflitto dati: lotto esistente con anagrafica diversa', 'ERROR');
+        return;
+      }
+
+      updateCalibration(editingCalibration.id, {
+        lotId: existingLot.id,
+        lotCode: existingLot.code,
+        rawMaterialId: existingLot.rawMaterialId,
+        subtypeId: existingLot.subtypeId,
+        varietyId: existingLot.varietyId,
+        rawMaterial: rawMaterials.find(r => r.id === existingLot.rawMaterialId)?.name || editingCalibration.rawMaterial,
+        subtype: subtypes.find(st => st.id === existingLot.subtypeId)?.name || '',
+        variety: varieties.find(v => v.id === existingLot.varietyId)?.name || editingCalibration.variety,
+        producer: existingLot.producer,
+      } as any);
+      closeEditModal();
+      return;
+    }
+
+    const lotPayload = {
+      code: normalizedLotCode,
+      rawMaterialId: editRawMaterialId,
+      subtypeId: editSubtypeId || undefined,
+      varietyId: editVarietyId,
+      producer,
+      notes: undefined,
+    };
+
+    const creationResult = addLot(lotPayload as any);
+    if (!creationResult.ok) {
+      setLotConflictWarning(creationResult.message);
+      return;
+    }
+
+    const createdLot = lots.find(l => l.code.toUpperCase() === normalizedLotCode)
+      || [...lots].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+
+    updateCalibration(editingCalibration.id, {
+      lotId: createdLot?.id,
+      lotCode: normalizedLotCode,
+      rawMaterialId: editRawMaterialId,
+      subtypeId: editSubtypeId || undefined,
+      varietyId: editVarietyId,
+      rawMaterial: rawMaterials.find(r => r.id === editRawMaterialId)?.name || '',
+      subtype: subtypes.find(st => st.id === editSubtypeId)?.name || '',
+      variety: varieties.find(v => v.id === editVarietyId)?.name || '',
+      producer,
+    } as any);
+
+    notify(`Lotto ${normalizedLotCode} creato e associato alla calibrazione`, 'SUCCESS');
+    closeEditModal();
+  };
+
+  const handleDeleteCalibration = (cal: Calibration, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteCalibrationId(cal.id);
+  };
 
   const renderForm = () => (
     <div className="p-4 bg-white border-b border-slate-200 shadow-inner">
@@ -326,15 +440,14 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
           const pCount = processes.filter(p => p.calibrationId === cal.id).length;
           const weight = pallets.filter(pal => processes.some(p => p.calibrationId === cal.id && p.id === pal.processId)).reduce((a, b) => a + b.weight, 0);
           
-          // Find if this calibration is linked to a Lot
-          const linkedLot = cal.lotId ? lots.find(l => l.id === cal.lotId) : null;
+          const lotCodeSnapshot = cal.lotCode;
 
           return (
             <div key={cal.id} onClick={() => onSelect(cal.id)} className={`group p-4 border-b border-slate-100 cursor-pointer transition-all hover:bg-white ${isSelected ? 'bg-white ring-1 ring-inset ring-blue-500 border-l-4 border-l-blue-600' : 'border-l-4 border-l-transparent'}`}>
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
                      <h3 className={`font-bold text-sm ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>{cal.rawMaterial}</h3>
-                     {linkedLot && <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 rounded font-mono border border-yellow-200">{linkedLot.code}</span>}
+                     {lotCodeSnapshot && <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 rounded font-mono border border-yellow-200">{lotCodeSnapshot}</span>}
                 </div>
                 <StatusBadge status={cal.status} />
               </div>
@@ -354,14 +467,78 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
                     <span className="text-slate-700 mr-1">{weight.toLocaleString()}</span> Kg
                   </div>
                 </div>
-                {cal.status === CalibrationStatus.OPEN && (
-                    <button onClick={(e) => openDuplicate(cal, e)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-blue-600 hover:bg-blue-50 rounded flex items-center gap-1 text-[10px] font-bold uppercase" title="Cambio Lotto"><Copy className="w-3 h-3" /> Cambio</button>
-                )}
+                <div className="flex items-center gap-1">
+                  <button onClick={(e) => handleQuickEditCalibration(cal, e)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-slate-500 hover:bg-slate-100 rounded" title="Modifica calibrazione"><Pencil className="w-3.5 h-3.5" /></button>
+                  <button onClick={(e) => handleDeleteCalibration(cal, e)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-red-500 hover:bg-red-50 rounded" title="Elimina calibrazione"><Trash2 className="w-3.5 h-3.5" /></button>
+                  {cal.status === CalibrationStatus.OPEN && (
+                      <button onClick={(e) => openDuplicate(cal, e)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-blue-600 hover:bg-blue-50 rounded flex items-center gap-1 text-[10px] font-bold uppercase" title="Cambio Lotto"><Copy className="w-3 h-3" /> Cambio</button>
+                  )}
+                </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      <FormModal
+        isOpen={!!editingCalibration}
+        onClose={closeEditModal}
+        onSubmit={handleEditCalibrationSubmit}
+        title="Modifica calibrazione (tramite lotto)"
+        submitLabel="Salva"
+      >
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Sigla Lotto</label>
+          <input
+            autoFocus
+            required
+            className="w-full border rounded px-2.5 py-2 text-sm font-mono uppercase focus:ring-2 focus:ring-blue-500 outline-none"
+            value={editLotCode}
+            onChange={(e) => setEditLotCode(e.target.value.toUpperCase())}
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Grezzo</label>
+          <select className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required value={editRawMaterialId} onChange={(e) => { setEditRawMaterialId(e.target.value); setEditSubtypeId(''); setEditVarietyId(''); }}>
+            <option value="">Seleziona...</option>
+            {rawMaterials.map(r => <option key={r.id} value={r.id}>{r.name} ({r.code})</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tipologia</label>
+          <select className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editSubtypeId} onChange={(e) => setEditSubtypeId(e.target.value)}>
+            <option value="">Nessuna</option>
+            {subtypes.filter(st => st.rawMaterialId === editRawMaterialId).map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Varietà</label>
+          <select className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required value={editVarietyId} onChange={(e) => setEditVarietyId(e.target.value)}>
+            <option value="">Seleziona...</option>
+            {varieties.filter(v => v.rawMaterialId === editRawMaterialId && (!editSubtypeId || !v.subtypeId || v.subtypeId === editSubtypeId)).map(v => <option key={v.id} value={v.id}>{v.name} ({v.code})</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Produttore</label>
+          <input
+            required
+            className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            value={editProducer}
+            onChange={(e) => setEditProducer(e.target.value)}
+          />
+        </div>
+        {lotConflictWarning && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{lotConflictWarning}</div>}
+      </FormModal>
+
+      <ConfirmModal
+        isOpen={!!deleteCalibrationId}
+        onClose={() => setDeleteCalibrationId(null)}
+        onConfirm={() => deleteCalibrationId && deleteCalibration(deleteCalibrationId)}
+        title="Elimina calibrazione"
+        message="Verranno eliminate anche lavorazioni e pedane collegate. Confermi?"
+        confirmLabel="Elimina"
+        isDestructive
+      />
     </div>
   );
 };
