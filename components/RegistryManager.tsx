@@ -5,6 +5,7 @@ import { Trash2, Tag, Scale, Boxes, Sparkles, Pencil, X, Hash, Search, ChevronLe
 import { WeightType, ProductQuality, ProductNature } from '../types';
 import { LabelEditor } from './LabelEditor'; // Import the new editor
 import { ValidationResult } from '../services/domain/registryValidation';
+import { DecisionModal } from './ui/Modal';
 
 type Tab = 'GREZZI' | 'TIPOLOGIE' | 'VARIETA' | 'IMBALLAGGI' | 'LAVORATI' | 'LOTTI' | 'ETICHETTA';
 
@@ -67,6 +68,8 @@ export const RegistryManager: React.FC = () => {
       producer: '',
       notes: ''
   });
+  const [pendingLotUpdate, setPendingLotUpdate] = useState<{ id: string; payload: any } | null>(null);
+
 
   // Reset logic on navigation
   useEffect(() => {
@@ -265,7 +268,20 @@ export const RegistryManager: React.FC = () => {
           varietyId: lotForm.varietyId,
           notes: lotForm.notes || undefined
       };
-      const result = editingId ? updateLot(editingId, payload) : addLot(payload);
+      if (editingId) {
+        const existingLot = lots.find(l => l.id === editingId);
+        const lotCodeChanged = existingLot && existingLot.code !== code;
+
+        if (lotCodeChanged) {
+          setPendingLotUpdate({ id: editingId, payload });
+          return;
+        }
+
+        const result = updateLot(editingId, payload, { propagateToOperationalSnapshots: false });
+        handleValidationResult(result);
+        return;
+      }
+      const result = addLot(payload);
       handleValidationResult(result);
   };
 
@@ -747,6 +763,27 @@ export const RegistryManager: React.FC = () => {
                 </div>
             )}
         </div>
-    </div>
+    
+      <DecisionModal
+        isOpen={!!pendingLotUpdate}
+        onClose={() => setPendingLotUpdate(null)}
+        title="Propagare nuovo codice lotto?"
+        message="Il codice lotto è cambiato. Vuoi aggiornare anche calibrazioni, lavorazioni e pedane già collegate?"
+        primaryLabel="Sì, propaga"
+        secondaryLabel="No, solo lotto"
+        onConfirmPrimary={() => {
+          if (!pendingLotUpdate) return;
+          const result = updateLot(pendingLotUpdate.id, pendingLotUpdate.payload, { propagateToOperationalSnapshots: true });
+          setPendingLotUpdate(null);
+          handleValidationResult(result);
+        }}
+        onConfirmSecondary={() => {
+          if (!pendingLotUpdate) return;
+          const result = updateLot(pendingLotUpdate.id, pendingLotUpdate.payload, { propagateToOperationalSnapshots: false });
+          setPendingLotUpdate(null);
+          handleValidationResult(result);
+        }}
+      />
+</div>
   );
 };

@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../services/store';
 import { ProcessStatus, WeightType } from '../types';
-import { Package, Trash2, Clock, Info, Printer } from 'lucide-react';
-import { ConfirmModal } from './ui/Modal';
+import { Package, Trash2, Clock, Info, Printer, Pencil } from 'lucide-react';
+import { ConfirmModal, FormModal } from './ui/Modal';
 import { LabelEditor } from './LabelEditor';
 
 interface Props {
@@ -12,11 +12,24 @@ interface Props {
 }
 
 export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
-  const { processes, getPalletsByProcess, addPallet, deletePallet, calibrations, lots, varieties, productTypes } = useData();
+  const { processes, getPalletsByProcess, addPallet, updatePallet, deletePallet, calibrations, productTypes } = useData();
   const [caseCount, setCaseCount] = useState<string>('');
   const [weight, setWeight] = useState<string>('');
   const [notes, setNotes] = useState('');
   const [deletePalletId, setDeletePalletId] = useState<string | null>(null);
+  const [editingPallet, setEditingPallet] = useState<any | null>(null);
+  const [editCaseCount, setEditCaseCount] = useState('');
+  const [editWeight, setEditWeight] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editProcessId, setEditProcessId] = useState('');
+  const [editLotCode, setEditLotCode] = useState('');
+  const [editRawMaterial, setEditRawMaterial] = useState('');
+  const [editVariety, setEditVariety] = useState('');
+  const [editProducer, setEditProducer] = useState('');
+  const [editProductType, setEditProductType] = useState('');
+  const [editPackaging, setEditPackaging] = useState('');
+  const [editLine, setEditLine] = useState('');
+  const [editCaliber, setEditCaliber] = useState('');
   
   // Printing State
   const [printingPallet, setPrintingPallet] = useState<any | null>(null);
@@ -94,21 +107,72 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
     setCaseCount(''); setWeight(''); setNotes('');
   };
 
+
+  const handleEditPallet = (pallet: any) => {
+    setEditingPallet(pallet);
+    setEditCaseCount(String(pallet.caseCount));
+    setEditWeight(String(pallet.weight));
+    setEditNotes(pallet.notes || '');
+    setEditProcessId(pallet.processId);
+    setEditLotCode(pallet.lotCode || process?.lotCode || '');
+    setEditRawMaterial(pallet.rawMaterial || process?.rawMaterial || '');
+    setEditVariety(pallet.variety || process?.variety || '');
+    setEditProducer(pallet.producer || process?.producer || '');
+    setEditProductType(pallet.productType || process?.productType || '');
+    setEditPackaging(pallet.packaging || process?.packaging || '');
+    setEditLine(pallet.line || process?.line || '');
+    setEditCaliber(pallet.caliber || process?.caliber || '');
+  };
+
+  const applyPalletUpdate = (palletId: string, payload: any) => {
+    updatePallet(palletId, payload);
+    setEditingPallet(null);
+  };
+
+  const handleEditPalletSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPallet) return;
+
+    const finalCases = safeCalculate(editCaseCount);
+    const finalWeight = safeCalculate(editWeight);
+    const caseCount = Number(finalCases);
+    const weight = Number(finalWeight);
+
+    if (!Number.isFinite(caseCount) || !Number.isInteger(caseCount) || caseCount <= 0) return;
+    if (!Number.isFinite(weight) || weight <= 0) return;
+
+    const payload = {
+      processId: editProcessId,
+      caseCount,
+      weight,
+      notes: editNotes.trim() || undefined,
+      lotCode: editLotCode.trim() || undefined,
+      rawMaterial: editRawMaterial.trim() || undefined,
+      variety: editVariety.trim() || undefined,
+      producer: editProducer.trim() || undefined,
+      productType: editProductType.trim() || undefined,
+      packaging: editPackaging.trim() || undefined,
+      line: editLine.trim() || undefined,
+      caliber: editCaliber.trim() || undefined,
+    };
+
+    applyPalletUpdate(editingPallet.id, payload);
+  };
+
   const handlePrint = (pallet: any) => {
       // Gather all necessary info for the label
       if (!process) return;
       const calibration = calibrations.find(c => c.id === process.calibrationId);
-      const lot = calibration?.lotId ? lots.find(l => l.id === calibration.lotId) : null;
       const pt = productTypes.find(p => p.id === process.productTypeId);
 
       const printData = {
           ...pallet,
-          rawMaterial: calibration?.rawMaterial,
-          productType: process.productType,
-          variety: calibration?.variety,
-          lotCode: lot?.code || '---',
-          producer: calibration?.producer,
-          packaging: process.packaging,
+          rawMaterial: pallet.rawMaterial || process.rawMaterial || calibration?.rawMaterial,
+          productType: pallet.productType || process.productType,
+          variety: pallet.variety || process.variety || calibration?.variety,
+          lotCode: pallet.lotCode || process.lotCode || calibration?.lotCode || '---',
+          producer: pallet.producer || process.producer || calibration?.producer,
+          packaging: pallet.packaging || process.packaging,
           quality: pt?.quality
       };
       setPrintingPallet(printData);
@@ -174,6 +238,10 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
                         readOnly={process.weightType === WeightType.EGALIZZATO}
                     />
                 </div>
+                <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Note</label>
+                    <input className="w-full border-slate-300 border rounded px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Note opzionali" value={notes} onChange={e => setNotes(e.target.value)} />
+                </div>
                 <button type="submit" className="h-[52px] px-6 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-md flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50">SALVA</button>
             </form>
             {process.weightType === WeightType.EGALIZZATO && (
@@ -196,12 +264,52 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
                 </div>
                 <div className="flex gap-1">
                     <button onClick={() => handlePrint(pallet)} className="text-slate-200 hover:text-blue-500 p-2 transition-colors" title="Stampa Etichetta"><Printer className="w-4 h-4" /></button>
+                    {isOpen && <button onClick={() => handleEditPallet(pallet)} className="text-slate-200 hover:text-slate-600 p-2 transition-colors" title="Modifica pedana"><Pencil className="w-4 h-4" /></button>}
                     {isOpen && <button onClick={() => setDeletePalletId(pallet.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><Trash2 className="w-4 h-4" /></button>}
                 </div>
             </div>
         ))}
         {pallets.length === 0 && <div className="text-center py-20 text-slate-300 text-xs font-medium uppercase tracking-widest">In attesa della prima pedana...</div>}
       </div>
+
+
+      <FormModal
+        isOpen={!!editingPallet}
+        onClose={() => setEditingPallet(null)}
+        onSubmit={handleEditPalletSubmit}
+        title="Modifica pedana"
+        submitLabel="Salva"
+      >
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Colli</label>
+          <input autoFocus required inputMode="numeric" className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editCaseCount} onChange={(e) => setEditCaseCount(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Peso (Kg)</label>
+          <input required inputMode="decimal" className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Note</label>
+          <textarea rows={2} className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lavorazione</label>
+          <select className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editProcessId} onChange={(e) => setEditProcessId(e.target.value)}>
+            {processes.map(pr => <option key={pr.id} value={pr.id}>{pr.line} • {pr.productType}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lotto</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editLotCode} onChange={(e) => setEditLotCode(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Grezzo</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editRawMaterial} onChange={(e) => setEditRawMaterial(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Varietà</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editVariety} onChange={(e) => setEditVariety(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Produttore</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editProducer} onChange={(e) => setEditProducer(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Articolo</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editProductType} onChange={(e) => setEditProductType(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Imballaggio</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editPackaging} onChange={(e) => setEditPackaging(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Linea</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editLine} onChange={(e) => setEditLine(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Calibro</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editCaliber} onChange={(e) => setEditCaliber(e.target.value)} /></div>
+        </div>
+      </FormModal>
+
 
       <ConfirmModal 
         isOpen={!!deletePalletId}
@@ -225,7 +333,7 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
                    </div>
                    <div className="p-4 border-t bg-white flex justify-end gap-2">
                        <button onClick={() => setPrintingPallet(null)} className="px-4 py-2 text-slate-600 font-bold text-sm">Chiudi</button>
-                       <button onClick={() => { alert('Inviato alla stampante ZPL/PDF...'); setPrintingPallet(null); }} className="px-6 py-2 bg-blue-600 text-white rounded font-bold text-sm hover:bg-blue-700 shadow-md">Stampa Ora</button>
+                       <button onClick={() => setPrintingPallet(null)} className="px-6 py-2 bg-blue-600 text-white rounded font-bold text-sm hover:bg-blue-700 shadow-md">Conferma Stampa</button>
                    </div>
               </div>
           </div>
