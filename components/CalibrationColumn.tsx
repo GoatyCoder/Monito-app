@@ -4,6 +4,7 @@ import { useData } from '../services/store';
 import { Calibration, CalibrationStatus, ProcessStatus } from '../types';
 import { Plus, Search, Layers, ChevronRight, Copy, Keyboard, X, Barcode, Check, Pencil, Trash2 } from 'lucide-react';
 import { StatusBadge } from './ui/Badge';
+import { ConfirmModal, FormModal } from './ui/Modal';
 
 interface Props {
   selectedId: string | null;
@@ -15,6 +16,9 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
   const [filter, setFilter] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState<Calibration | null>(null);
+  const [editingCalibration, setEditingCalibration] = useState<Calibration | null>(null);
+  const [editProducer, setEditProducer] = useState('');
+  const [deleteCalibrationId, setDeleteCalibrationId] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -157,16 +161,25 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
 
   const handleQuickEditCalibration = (cal: Calibration, e: React.MouseEvent) => {
     e.stopPropagation();
-    const producer = window.prompt('Nuovo produttore', cal.producer);
-    if (!producer || producer.trim() === cal.producer) return;
-    updateCalibration(cal.id, { producer: producer.trim() });
+    setEditingCalibration(cal);
+    setEditProducer(cal.producer);
+  };
+
+  const handleEditCalibrationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCalibration) return;
+    const producer = editProducer.trim();
+    if (!producer || producer === editingCalibration.producer) {
+      setEditingCalibration(null);
+      return;
+    }
+    updateCalibration(editingCalibration.id, { producer });
+    setEditingCalibration(null);
   };
 
   const handleDeleteCalibration = (cal: Calibration, e: React.MouseEvent) => {
     e.stopPropagation();
-    const yes = window.confirm('Eliminare la calibrazione? Verranno eliminate anche lavorazioni e pedane collegate.');
-    if (!yes) return;
-    deleteCalibration(cal.id);
+    setDeleteCalibrationId(cal.id);
   };
 
   const renderForm = () => (
@@ -381,6 +394,35 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
           );
         })}
       </div>
+
+      <FormModal
+        isOpen={!!editingCalibration}
+        onClose={() => setEditingCalibration(null)}
+        onSubmit={handleEditCalibrationSubmit}
+        title="Modifica calibrazione"
+        submitLabel="Salva"
+      >
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Produttore</label>
+          <input
+            autoFocus
+            required
+            className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            value={editProducer}
+            onChange={(e) => setEditProducer(e.target.value)}
+          />
+        </div>
+      </FormModal>
+
+      <ConfirmModal
+        isOpen={!!deleteCalibrationId}
+        onClose={() => setDeleteCalibrationId(null)}
+        onConfirm={() => deleteCalibrationId && deleteCalibration(deleteCalibrationId)}
+        title="Elimina calibrazione"
+        message="Verranno eliminate anche lavorazioni e pedane collegate. Confermi?"
+        confirmLabel="Elimina"
+        isDestructive
+      />
     </div>
   );
 };

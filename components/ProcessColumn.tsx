@@ -5,7 +5,7 @@ import { Process, ProcessStatus, CalibrationStatus } from '../types';
 import { Plus, Settings, StopCircle, ArrowUpCircle, X, ArrowRight, Keyboard, List, Pencil, Trash2 } from 'lucide-react';
 import { StatusBadge } from './ui/Badge';
 import { StatItem } from './ui/Stats';
-import { ConfirmModal } from './ui/Modal';
+import { ConfirmModal, FormModal } from './ui/Modal';
 
 interface Props {
   calibrationId: string | null;
@@ -22,6 +22,10 @@ export const ProcessColumn: React.FC<Props> = ({ calibrationId, selectedId, onSe
   
   const [formData, setFormData] = useState({ line: '', caliber: '', productTypeId: '', packagingId: '' });
   const [confirmCloseId, setConfirmCloseId] = useState<string | null>(null);
+  const [editingProcess, setEditingProcess] = useState<Process | null>(null);
+  const [editLine, setEditLine] = useState('');
+  const [editCaliber, setEditCaliber] = useState('');
+  const [deleteProcessId, setDeleteProcessId] = useState<string | null>(null);
   
   // Quick Code Inputs
   const [ptCodeInput, setPtCodeInput] = useState('');
@@ -138,18 +142,24 @@ export const ProcessColumn: React.FC<Props> = ({ calibrationId, selectedId, onSe
 
   const handleQuickEditProcess = (proc: Process, e: React.MouseEvent) => {
     e.stopPropagation();
-    const line = window.prompt('Linea', proc.line);
-    if (!line) return;
-    const caliber = window.prompt('Calibro', proc.caliber);
-    if (!caliber) return;
-    updateProcess(proc.id, { line: line.trim(), caliber: caliber.trim() });
+    setEditingProcess(proc);
+    setEditLine(proc.line);
+    setEditCaliber(proc.caliber);
+  };
+
+  const handleEditProcessSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProcess) return;
+    const line = editLine.trim();
+    const caliber = editCaliber.trim();
+    if (!line || !caliber) return;
+    updateProcess(editingProcess.id, { line, caliber });
+    setEditingProcess(null);
   };
 
   const handleDeleteProcess = (proc: Process, e: React.MouseEvent) => {
     e.stopPropagation();
-    const yes = window.confirm('Eliminare la lavorazione? Verranno eliminate anche le pedane collegate.');
-    if (!yes) return;
-    deleteProcess(proc.id);
+    setDeleteProcessId(proc.id);
   };
 
   const handleAddSubmit = (e: React.FormEvent) => {
@@ -334,6 +344,34 @@ export const ProcessColumn: React.FC<Props> = ({ calibrationId, selectedId, onSe
           );
         })}
       </div>
+
+
+      <FormModal
+        isOpen={!!editingProcess}
+        onClose={() => setEditingProcess(null)}
+        onSubmit={handleEditProcessSubmit}
+        title="Modifica lavorazione"
+        submitLabel="Salva"
+      >
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Linea</label>
+          <input autoFocus required className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editLine} onChange={(e) => setEditLine(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Calibro</label>
+          <input required className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editCaliber} onChange={(e) => setEditCaliber(e.target.value)} />
+        </div>
+      </FormModal>
+
+      <ConfirmModal
+        isOpen={!!deleteProcessId}
+        onClose={() => setDeleteProcessId(null)}
+        onConfirm={() => deleteProcessId && deleteProcess(deleteProcessId)}
+        title="Elimina lavorazione"
+        message="Verranno eliminate anche le pedane collegate. Confermi?"
+        confirmLabel="Elimina"
+        isDestructive
+      />
 
       <ConfirmModal 
         isOpen={!!confirmCloseId}
