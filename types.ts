@@ -148,6 +148,7 @@ export interface Process {
   startTime: string;
   endTime?: string;
   status: ProcessStatus;
+  note?: string;
 
   // Immutable snapshots from calibration at process creation.
   lotCode?: string;

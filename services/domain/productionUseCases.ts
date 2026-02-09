@@ -137,7 +137,7 @@ export const updateCalibrationSnapshotsUseCase = (
 
 export type UpdateProcessInput = {
   processId: string;
-  data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging' | 'lotCode' | 'rawMaterial' | 'subtype' | 'variety' | 'producer'>>;
+  data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging' | 'lotCode' | 'rawMaterial' | 'subtype' | 'variety' | 'producer' | 'note'>>;
   processes: Process[];
   pallets: Pallet[];
   propagateToLinkedPallets?: boolean;

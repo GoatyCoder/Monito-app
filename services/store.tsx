@@ -59,7 +59,7 @@ interface DataContextType {
   duplicateCalibration: (oldId: string, newData: Omit<Calibration, 'id' | 'startDate' | 'status' | 'incomingRawWeight'>) => void;
 
   addProcess: (data: Omit<Process, 'id' | 'status' | 'startTime'>) => void;
-  updateProcess: (id: string, data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging' | 'lotCode' | 'rawMaterial' | 'subtype' | 'variety' | 'producer'>>, options?: { propagateToLinkedPallets?: boolean }) => void;
+  updateProcess: (id: string, data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging' | 'lotCode' | 'rawMaterial' | 'subtype' | 'variety' | 'producer' | 'note'>>, options?: { propagateToLinkedPallets?: boolean }) => void;
   deleteProcess: (id: string) => void;
   closeProcess: (id: string) => void;
   addPallet: (data: Omit<Pallet, 'id' | 'timestamp'>) => void;
@@ -407,7 +407,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateProcess = (
     id: string,
-    data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging' | 'lotCode' | 'rawMaterial' | 'subtype' | 'variety' | 'producer'>>,
+    data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging' | 'lotCode' | 'rawMaterial' | 'subtype' | 'variety' | 'producer' | 'note'>>,
     options?: { propagateToLinkedPallets?: boolean }
   ) => {
     const updated = updateProcessUseCase({
