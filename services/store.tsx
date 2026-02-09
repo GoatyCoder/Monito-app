@@ -24,6 +24,7 @@ import {
 import {
   createPalletUseCase,
   propagateLotCodeToOperationalSnapshots,
+  updateCalibrationSnapshotsUseCase,
 } from './domain/productionUseCases';
 
 type RawMaterialInput = Omit<RawMaterial, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt' | 'updatedAt'>;
@@ -31,6 +32,7 @@ type VarietyInput = Omit<Variety, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt'
 type PackagingInput = Omit<Packaging, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt' | 'updatedAt'>;
 type ProductTypeInput = Omit<ProductType, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt' | 'updatedAt'>;
 type LotInput = Omit<Lot, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt' | 'updatedAt'>;
+type LotMutationResult = ValidationResult & { lot?: Lot };
 
 interface DataContextType {
   calibrations: Calibration[];
@@ -48,7 +50,7 @@ interface DataContextType {
   currentUserRole: UserRole;
 
   addCalibration: (data: Omit<Calibration, 'id' | 'status' | 'incomingRawWeight'>) => void;
-  updateCalibration: (id: string, data: Partial<Pick<Calibration, 'lotId' | 'rawMaterialId' | 'subtypeId' | 'varietyId' | 'rawMaterial' | 'subtype' | 'variety' | 'producer' | 'startDate' | 'note'>>) => void;
+  updateCalibration: (id: string, data: Partial<Pick<Calibration, 'lotId' | 'lotCode' | 'rawMaterialId' | 'subtypeId' | 'varietyId' | 'rawMaterial' | 'subtype' | 'variety' | 'producer' | 'startDate' | 'note'>>, options?: { propagateToLinkedOperationalSnapshots?: boolean }) => void;
   deleteCalibration: (id: string) => void;
   updateCalibrationStatus: (id: string, status: CalibrationStatus) => void;
   addIncomingWeight: (id: string, weight: number) => void;
@@ -92,7 +94,7 @@ interface DataContextType {
   hardDeleteProductType: (id: string) => void;
   restoreProductType: (id: string) => void;
 
-  addLot: (data: LotInput) => ValidationResult;
+  addLot: (data: LotInput) => LotMutationResult;
   updateLot: (id: string, data: LotInput, options?: { propagateToOperationalSnapshots?: boolean }) => ValidationResult;
   deleteLot: (id: string) => void;
   hardDeleteLot: (id: string) => void;
@@ -296,9 +298,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
 
-  const updateCalibration = (id: string, data: Partial<Pick<Calibration, 'lotId' | 'rawMaterialId' | 'subtypeId' | 'varietyId' | 'rawMaterial' | 'subtype' | 'variety' | 'producer' | 'startDate' | 'note'>>) => {
-    const nextLotCode = data.lotId ? lotsState.find(l => l.id === data.lotId)?.code : undefined;
-    setCalibrations(prev => prev.map(c => c.id === id ? { ...c, ...data, lotCode: data.lotId !== undefined ? nextLotCode : c.lotCode } : c));
+  const updateCalibration = (
+    id: string,
+    data: Partial<Pick<Calibration, 'lotId' | 'lotCode' | 'rawMaterialId' | 'subtypeId' | 'varietyId' | 'rawMaterial' | 'subtype' | 'variety' | 'producer' | 'startDate' | 'note'>>,
+    options?: { propagateToLinkedOperationalSnapshots?: boolean }
+  ) => {
+    const updated = updateCalibrationSnapshotsUseCase({
+      calibrationId: id,
+      data,
+      calibrations,
+      processes,
+      pallets,
+      lots: lotsState,
+      propagateToLinkedOperationalSnapshots: options?.propagateToLinkedOperationalSnapshots,
+    });
+
+    if (!updated.updatedCalibration) return;
+
+    setCalibrations(updated.calibrations);
+
+    if (options?.propagateToLinkedOperationalSnapshots) {
+      setProcesses(updated.processes);
+      setPallets(updated.pallets);
+      addAuditEvent('CALIBRATION_UPDATED', 'calibration', id, `Aggiornata calibrazione ${id} con propagazione snapshot`, {
+        propagateToLinkedOperationalSnapshots: true,
+        processCount: updated.affectedProcessCount,
+        palletCount: updated.affectedPalletCount,
+      });
+      notify('Calibrazione aggiornata e propagata su lavorazioni/pedane collegate', 'SUCCESS');
+      return;
+    }
+
     addAuditEvent('CALIBRATION_UPDATED', 'calibration', id, `Aggiornata calibrazione ${id}`);
     notify('Calibrazione aggiornata', 'SUCCESS');
   };
@@ -699,7 +729,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     notify('Articolo eliminato definitivamente', 'INFO');
   };
 
-  const addLot = (data: LotInput) => {
+  const addLot = (data: LotInput): LotMutationResult => {
     const lotCodeRequired = validateRequiredCode(data.code, 'lotto');
     if (!lotCodeRequired.ok) return lotCodeRequired;
     const unique = validateUniqueCode(lotsState, data.code);
@@ -707,9 +737,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const relation = validateLotRelations(data, { rawMaterials: rawMaterialsState, subtypes: subtypesState, varieties: varietiesState });
     if (!relation.ok) return relation;
 
-    setLotsState(prev => [{ ...data, id: genId('l'), code: normalizeCode(data.code), isDeleted: false, createdAt: nowIso(), updatedAt: nowIso() }, ...prev]);
+    const created: Lot = {
+      ...data,
+      id: genId('l'),
+      code: normalizeCode(data.code),
+      isDeleted: false,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+
+    setLotsState(prev => [created, ...prev]);
     notify(`Lotto "${data.code}" aggiunto`, 'SUCCESS');
-    return ok();
+    return { ...ok(), lot: created };
   };
 
   const updateLot = (id: string, data: LotInput, options?: { propagateToOperationalSnapshots?: boolean }) => {

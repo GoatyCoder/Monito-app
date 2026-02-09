@@ -4,7 +4,7 @@ import { useData } from '../services/store';
 import { Calibration, CalibrationStatus, ProcessStatus } from '../types';
 import { Plus, Search, Layers, ChevronRight, Copy, Keyboard, X, Barcode, Check, Pencil, Trash2 } from 'lucide-react';
 import { StatusBadge } from './ui/Badge';
-import { ConfirmModal, FormModal } from './ui/Modal';
+import { ConfirmModal, DecisionModal, FormModal } from './ui/Modal';
 
 interface Props {
   selectedId: string | null;
@@ -23,6 +23,10 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
   const [editVarietyId, setEditVarietyId] = useState('');
   const [editProducer, setEditProducer] = useState('');
   const [lotConflictWarning, setLotConflictWarning] = useState<string | null>(null);
+  const [pendingCalibrationUpdate, setPendingCalibrationUpdate] = useState<{
+    calibrationId: string;
+    payload: Partial<Pick<Calibration, 'lotId' | 'lotCode' | 'rawMaterialId' | 'subtypeId' | 'varietyId' | 'rawMaterial' | 'subtype' | 'variety' | 'producer'>>;
+  } | null>(null);
   const [deleteCalibrationId, setDeleteCalibrationId] = useState<string | null>(null);
 
   // Form State
@@ -180,6 +184,15 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
     setLotConflictWarning(null);
   };
 
+  const applyCalibrationUpdate = (
+    calibrationId: string,
+    payload: Partial<Pick<Calibration, 'lotId' | 'lotCode' | 'rawMaterialId' | 'subtypeId' | 'varietyId' | 'rawMaterial' | 'subtype' | 'variety' | 'producer'>>,
+    propagateToLinkedOperationalSnapshots: boolean
+  ) => {
+    updateCalibration(calibrationId, payload, { propagateToLinkedOperationalSnapshots });
+    closeEditModal();
+  };
+
   const handleEditCalibrationSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCalibration) return;
@@ -213,7 +226,7 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
         return;
       }
 
-      updateCalibration(editingCalibration.id, {
+      const payload = {
         lotId: existingLot.id,
         lotCode: existingLot.code,
         rawMaterialId: existingLot.rawMaterialId,
@@ -223,8 +236,16 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
         subtype: subtypes.find(st => st.id === existingLot.subtypeId)?.name || '',
         variety: varieties.find(v => v.id === existingLot.varietyId)?.name || editingCalibration.variety,
         producer: existingLot.producer,
-      } as any);
-      closeEditModal();
+      };
+
+      const processIds = new Set(processes.filter(p => p.calibrationId === editingCalibration.id).map(p => p.id));
+      const linkedPalletsCount = pallets.filter(pl => processIds.has(pl.processId)).length;
+      if (linkedPalletsCount > 0 && existingLot.code !== (editingCalibration.lotCode || '')) {
+        setPendingCalibrationUpdate({ calibrationId: editingCalibration.id, payload });
+        return;
+      }
+
+      applyCalibrationUpdate(editingCalibration.id, payload, false);
       return;
     }
 
@@ -243,12 +264,11 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
       return;
     }
 
-    const createdLot = lots.find(l => l.code.toUpperCase() === normalizedLotCode)
-      || [...lots].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    const createdLot = creationResult.lot;
 
-    updateCalibration(editingCalibration.id, {
+    const payload = {
       lotId: createdLot?.id,
-      lotCode: normalizedLotCode,
+      lotCode: createdLot?.code || normalizedLotCode,
       rawMaterialId: editRawMaterialId,
       subtypeId: editSubtypeId || undefined,
       varietyId: editVarietyId,
@@ -256,10 +276,18 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
       subtype: subtypes.find(st => st.id === editSubtypeId)?.name || '',
       variety: varieties.find(v => v.id === editVarietyId)?.name || '',
       producer,
-    } as any);
+    };
+
+    const processIds = new Set(processes.filter(p => p.calibrationId === editingCalibration.id).map(p => p.id));
+    const linkedPalletsCount = pallets.filter(pl => processIds.has(pl.processId)).length;
+    if (linkedPalletsCount > 0 && normalizedLotCode !== (editingCalibration.lotCode || '')) {
+      setPendingCalibrationUpdate({ calibrationId: editingCalibration.id, payload });
+      notify(`Lotto ${normalizedLotCode} creato. Scegli se propagare alle pedane collegate.`, 'INFO');
+      return;
+    }
 
     notify(`Lotto ${normalizedLotCode} creato e associato alla calibrazione`, 'SUCCESS');
-    closeEditModal();
+    applyCalibrationUpdate(editingCalibration.id, payload, false);
   };
 
   const handleDeleteCalibration = (cal: Calibration, e: React.MouseEvent) => {
@@ -529,6 +557,26 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
         </div>
         {lotConflictWarning && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{lotConflictWarning}</div>}
       </FormModal>
+
+
+      <DecisionModal
+        isOpen={!!pendingCalibrationUpdate}
+        onClose={() => setPendingCalibrationUpdate(null)}
+        title="Aggiornare anche le pedane collegate?"
+        message="La sigla lotto della calibrazione è cambiata. Vuoi propagare il nuovo lotto a lavorazioni e pedane già collegate?"
+        primaryLabel="Sì, aggiorna"
+        secondaryLabel="No, solo calibrazione"
+        onConfirmPrimary={() => {
+          if (!pendingCalibrationUpdate) return;
+          applyCalibrationUpdate(pendingCalibrationUpdate.calibrationId, pendingCalibrationUpdate.payload, true);
+          setPendingCalibrationUpdate(null);
+        }}
+        onConfirmSecondary={() => {
+          if (!pendingCalibrationUpdate) return;
+          applyCalibrationUpdate(pendingCalibrationUpdate.calibrationId, pendingCalibrationUpdate.payload, false);
+          setPendingCalibrationUpdate(null);
+        }}
+      />
 
       <ConfirmModal
         isOpen={!!deleteCalibrationId}
