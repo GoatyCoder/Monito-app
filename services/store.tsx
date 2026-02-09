@@ -48,13 +48,18 @@ interface DataContextType {
   currentUserRole: UserRole;
 
   addCalibration: (data: Omit<Calibration, 'id' | 'status' | 'incomingRawWeight'>) => void;
+  updateCalibration: (id: string, data: Partial<Pick<Calibration, 'lotId' | 'rawMaterialId' | 'subtypeId' | 'varietyId' | 'rawMaterial' | 'subtype' | 'variety' | 'producer' | 'startDate' | 'note'>>) => void;
+  deleteCalibration: (id: string) => void;
   updateCalibrationStatus: (id: string, status: CalibrationStatus) => void;
   addIncomingWeight: (id: string, weight: number) => void;
   duplicateCalibration: (oldId: string, newData: Omit<Calibration, 'id' | 'startDate' | 'status' | 'incomingRawWeight'>) => void;
 
   addProcess: (data: Omit<Process, 'id' | 'status' | 'startTime'>) => void;
+  updateProcess: (id: string, data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging'>>) => void;
+  deleteProcess: (id: string) => void;
   closeProcess: (id: string) => void;
   addPallet: (data: Omit<Pallet, 'id' | 'timestamp'>) => void;
+  updatePallet: (id: string, data: Partial<Pick<Pallet, 'caseCount' | 'weight' | 'notes'>>) => void;
   deletePallet: (id: string) => void;
 
   addRawMaterial: (data: RawMaterialInput) => ValidationResult;
@@ -290,6 +295,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     notify(`Calibrazione ${data.rawMaterial} programmata`, 'SUCCESS');
   };
 
+
+  const updateCalibration = (id: string, data: Partial<Pick<Calibration, 'lotId' | 'rawMaterialId' | 'subtypeId' | 'varietyId' | 'rawMaterial' | 'subtype' | 'variety' | 'producer' | 'startDate' | 'note'>>) => {
+    const nextLotCode = data.lotId ? lotsState.find(l => l.id === data.lotId)?.code : undefined;
+    setCalibrations(prev => prev.map(c => c.id === id ? { ...c, ...data, lotCode: data.lotId !== undefined ? nextLotCode : c.lotCode } : c));
+    addAuditEvent('CALIBRATION_UPDATED', 'calibration', id, `Aggiornata calibrazione ${id}`);
+    notify('Calibrazione aggiornata', 'SUCCESS');
+  };
+
+  const deleteCalibration = (id: string) => {
+    const calibrationProcesses = processes.filter(p => p.calibrationId === id);
+    const calibrationProcessIds = calibrationProcesses.map(p => p.id);
+    const removedPallets = pallets.filter(pl => calibrationProcessIds.includes(pl.processId)).length;
+
+    setPallets(prev => prev.filter(pl => !calibrationProcessIds.includes(pl.processId)));
+    setProcesses(prev => prev.filter(p => p.calibrationId !== id));
+    setCalibrations(prev => prev.filter(c => c.id !== id));
+
+    addAuditEvent('CALIBRATION_DELETED', 'calibration', id, `Eliminata calibrazione ${id} con cascata`, {
+      removedProcesses: calibrationProcesses.length,
+      removedPallets,
+    });
+    notify('Calibrazione eliminata con entità collegate', 'INFO');
+  };
+
   const updateCalibrationStatus = (id: string, status: CalibrationStatus) => {
     setCalibrations(prev => prev.map(c => c.id === id ? { ...c, status } : c));
     if (status === CalibrationStatus.CLOSED) {
@@ -342,6 +371,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     notify(`Lavorazione avviata su ${data.line}`, 'SUCCESS');
   };
 
+  const updateProcess = (id: string, data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging'>>) => {
+    setProcesses(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+    addAuditEvent('PROCESS_UPDATED', 'process', id, `Aggiornata lavorazione ${id}`);
+    notify('Lavorazione aggiornata', 'SUCCESS');
+  };
+
+  const deleteProcess = (id: string) => {
+    const removedPallets = pallets.filter(pl => pl.processId === id).length;
+    setPallets(prev => prev.filter(pl => pl.processId !== id));
+    setProcesses(prev => prev.filter(p => p.id !== id));
+    addAuditEvent('PROCESS_DELETED', 'process', id, `Eliminata lavorazione ${id} con cascata`, { removedPallets });
+    notify('Lavorazione eliminata con pedane collegate', 'INFO');
+  };
+
   const closeProcess = (id: string) => {
     setProcesses(prev => prev.map(p => p.id === id ? { ...p, status: ProcessStatus.CLOSED, endTime: nowIso() } : p));
     notify('Lavorazione completata e chiusa', 'INFO');
@@ -366,8 +409,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     notify(`Pedana registrata (${data.weight} Kg)`, 'SUCCESS');
   };
 
+  const updatePallet = (id: string, data: Partial<Pick<Pallet, 'caseCount' | 'weight' | 'notes'>>) => {
+    setPallets(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+    addAuditEvent('PALLET_UPDATED', 'pallet', id, `Aggiornata pedana ${id}`);
+    notify('Pedana aggiornata', 'SUCCESS');
+  };
+
   const deletePallet = (id: string) => {
     setPallets(prev => prev.filter(p => p.id !== id));
+    addAuditEvent('PALLET_DELETED', 'pallet', id, `Eliminata pedana ${id}`);
     notify('Pedana eliminata', 'INFO');
   };
 
@@ -737,7 +787,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <DataContext.Provider value={{
       calibrations, processes, pallets, rawMaterials, subtypes, varieties, packagings, productTypes, lots, labelLayout, toasts, auditEvents, currentUserRole,
-      addCalibration, updateCalibrationStatus, addIncomingWeight, duplicateCalibration, addProcess, closeProcess, addPallet, deletePallet,
+      addCalibration, updateCalibration, deleteCalibration, updateCalibrationStatus, addIncomingWeight, duplicateCalibration, addProcess, updateProcess, deleteProcess, closeProcess, addPallet, updatePallet, deletePallet,
       addRawMaterial, updateRawMaterial, deleteRawMaterial, hardDeleteRawMaterial, restoreRawMaterial,
       addSubtype, updateSubtype, deleteSubtype, hardDeleteSubtype, restoreSubtype,
       addVariety, updateVariety, deleteVariety, hardDeleteVariety, restoreVariety,
