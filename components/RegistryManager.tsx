@@ -265,7 +265,17 @@ export const RegistryManager: React.FC = () => {
           varietyId: lotForm.varietyId,
           notes: lotForm.notes || undefined
       };
-      const result = editingId ? updateLot(editingId, payload) : addLot(payload);
+      if (editingId) {
+        const existingLot = lots.find(l => l.id === editingId);
+        const lotCodeChanged = existingLot && existingLot.code !== code;
+        const propagate = lotCodeChanged
+          ? window.confirm('Il codice lotto è cambiato. Vuoi propagare il nuovo codice anche a calibrazioni, lavorazioni e pedane già collegate?')
+          : false;
+        const result = updateLot(editingId, payload, { propagateToOperationalSnapshots: propagate });
+        handleValidationResult(result);
+        return;
+      }
+      const result = addLot(payload);
       handleValidationResult(result);
   };
 
