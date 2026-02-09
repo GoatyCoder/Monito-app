@@ -12,7 +12,7 @@ interface Props {
 }
 
 export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
-  const { processes, getPalletsByProcess, addPallet, deletePallet, calibrations, lots, varieties, productTypes } = useData();
+  const { processes, getPalletsByProcess, addPallet, deletePallet, calibrations, productTypes } = useData();
   const [caseCount, setCaseCount] = useState<string>('');
   const [weight, setWeight] = useState<string>('');
   const [notes, setNotes] = useState('');
@@ -98,17 +98,16 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
       // Gather all necessary info for the label
       if (!process) return;
       const calibration = calibrations.find(c => c.id === process.calibrationId);
-      const lot = calibration?.lotId ? lots.find(l => l.id === calibration.lotId) : null;
       const pt = productTypes.find(p => p.id === process.productTypeId);
 
       const printData = {
           ...pallet,
-          rawMaterial: calibration?.rawMaterial,
-          productType: process.productType,
-          variety: calibration?.variety,
-          lotCode: lot?.code || '---',
-          producer: calibration?.producer,
-          packaging: process.packaging,
+          rawMaterial: pallet.rawMaterial || process.rawMaterial || calibration?.rawMaterial,
+          productType: pallet.productType || process.productType,
+          variety: pallet.variety || process.variety || calibration?.variety,
+          lotCode: pallet.lotCode || process.lotCode || calibration?.lotCode || '---',
+          producer: pallet.producer || process.producer || calibration?.producer,
+          packaging: pallet.packaging || process.packaging,
           quality: pt?.quality
       };
       setPrintingPallet(printData);
