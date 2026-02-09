@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../services/store';
 import { ProcessStatus, WeightType } from '../types';
 import { Package, Trash2, Clock, Info, Printer, Pencil } from 'lucide-react';
-import { ConfirmModal, FormModal } from './ui/Modal';
+import { ConfirmModal, DecisionModal, FormModal } from './ui/Modal';
 import { LabelEditor } from './LabelEditor';
 
 interface Props {
@@ -21,6 +21,16 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
   const [editCaseCount, setEditCaseCount] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editProcessId, setEditProcessId] = useState('');
+  const [editLotCode, setEditLotCode] = useState('');
+  const [editRawMaterial, setEditRawMaterial] = useState('');
+  const [editVariety, setEditVariety] = useState('');
+  const [editProducer, setEditProducer] = useState('');
+  const [editProductType, setEditProductType] = useState('');
+  const [editPackaging, setEditPackaging] = useState('');
+  const [editLine, setEditLine] = useState('');
+  const [editCaliber, setEditCaliber] = useState('');
+  const [pendingPalletUpdate, setPendingPalletUpdate] = useState<{ palletId: string; payload: any } | null>(null);
   
   // Printing State
   const [printingPallet, setPrintingPallet] = useState<any | null>(null);
@@ -104,6 +114,20 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
     setEditCaseCount(String(pallet.caseCount));
     setEditWeight(String(pallet.weight));
     setEditNotes(pallet.notes || '');
+    setEditProcessId(pallet.processId);
+    setEditLotCode(pallet.lotCode || process?.lotCode || '');
+    setEditRawMaterial(pallet.rawMaterial || process?.rawMaterial || '');
+    setEditVariety(pallet.variety || process?.variety || '');
+    setEditProducer(pallet.producer || process?.producer || '');
+    setEditProductType(pallet.productType || process?.productType || '');
+    setEditPackaging(pallet.packaging || process?.packaging || '');
+    setEditLine(pallet.line || process?.line || '');
+    setEditCaliber(pallet.caliber || process?.caliber || '');
+  };
+
+  const applyPalletUpdate = (palletId: string, payload: any, propagateToSiblingPallets: boolean) => {
+    updatePallet(palletId, payload, { propagateToSiblingPallets });
+    setEditingPallet(null);
   };
 
   const handleEditPalletSubmit = (e: React.FormEvent) => {
@@ -118,8 +142,38 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
     if (!Number.isFinite(caseCount) || !Number.isInteger(caseCount) || caseCount <= 0) return;
     if (!Number.isFinite(weight) || weight <= 0) return;
 
-    updatePallet(editingPallet.id, { caseCount, weight, notes: editNotes.trim() || undefined });
-    setEditingPallet(null);
+    const payload = {
+      processId: editProcessId,
+      caseCount,
+      weight,
+      notes: editNotes.trim() || undefined,
+      lotCode: editLotCode.trim() || undefined,
+      rawMaterial: editRawMaterial.trim() || undefined,
+      variety: editVariety.trim() || undefined,
+      producer: editProducer.trim() || undefined,
+      productType: editProductType.trim() || undefined,
+      packaging: editPackaging.trim() || undefined,
+      line: editLine.trim() || undefined,
+      caliber: editCaliber.trim() || undefined,
+    };
+
+    const affectsGroupSnapshots = payload.processId !== editingPallet.processId
+      || payload.lotCode !== (editingPallet.lotCode || undefined)
+      || payload.rawMaterial !== (editingPallet.rawMaterial || undefined)
+      || payload.variety !== (editingPallet.variety || undefined)
+      || payload.producer !== (editingPallet.producer || undefined)
+      || payload.productType !== (editingPallet.productType || undefined)
+      || payload.packaging !== (editingPallet.packaging || undefined)
+      || payload.line !== (editingPallet.line || undefined)
+      || payload.caliber !== (editingPallet.caliber || undefined);
+
+    const siblingCount = pallets.filter(p => p.processId === editingPallet.processId).length;
+    if (siblingCount > 1 && affectsGroupSnapshots) {
+      setPendingPalletUpdate({ palletId: editingPallet.id, payload });
+      return;
+    }
+
+    applyPalletUpdate(editingPallet.id, payload, false);
   };
 
   const handlePrint = (pallet: any) => {
@@ -249,9 +303,45 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
         </div>
         <div>
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Note</label>
-          <textarea rows={3} className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+          <textarea rows={2} className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lavorazione</label>
+          <select className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editProcessId} onChange={(e) => setEditProcessId(e.target.value)}>
+            {processes.map(pr => <option key={pr.id} value={pr.id}>{pr.line} • {pr.productType}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Lotto</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editLotCode} onChange={(e) => setEditLotCode(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Grezzo</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editRawMaterial} onChange={(e) => setEditRawMaterial(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Varietà</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editVariety} onChange={(e) => setEditVariety(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Produttore</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editProducer} onChange={(e) => setEditProducer(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Articolo</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editProductType} onChange={(e) => setEditProductType(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Imballaggio</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editPackaging} onChange={(e) => setEditPackaging(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Linea</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editLine} onChange={(e) => setEditLine(e.target.value)} /></div>
+          <div><label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Calibro</label><input className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editCaliber} onChange={(e) => setEditCaliber(e.target.value)} /></div>
         </div>
       </FormModal>
+
+
+      <DecisionModal
+        isOpen={!!pendingPalletUpdate}
+        onClose={() => setPendingPalletUpdate(null)}
+        title="Propagare alle pedane dello stesso gruppo?"
+        message="Hai modificato dati condivisi della pedana. Vuoi applicare la modifica a tutte le pedane della stessa lavorazione?"
+        primaryLabel="Sì, propaga"
+        secondaryLabel="No, solo questa"
+        onConfirmPrimary={() => {
+          if (!pendingPalletUpdate) return;
+          applyPalletUpdate(pendingPalletUpdate.palletId, pendingPalletUpdate.payload, true);
+          setPendingPalletUpdate(null);
+        }}
+        onConfirmSecondary={() => {
+          if (!pendingPalletUpdate) return;
+          applyPalletUpdate(pendingPalletUpdate.palletId, pendingPalletUpdate.payload, false);
+          setPendingPalletUpdate(null);
+        }}
+      />
 
       <ConfirmModal 
         isOpen={!!deletePalletId}

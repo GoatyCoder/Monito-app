@@ -25,6 +25,8 @@ import {
   createPalletUseCase,
   propagateLotCodeToOperationalSnapshots,
   updateCalibrationSnapshotsUseCase,
+  updateProcessUseCase,
+  updatePalletUseCase,
 } from './domain/productionUseCases';
 
 type RawMaterialInput = Omit<RawMaterial, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt' | 'updatedAt'>;
@@ -57,11 +59,11 @@ interface DataContextType {
   duplicateCalibration: (oldId: string, newData: Omit<Calibration, 'id' | 'startDate' | 'status' | 'incomingRawWeight'>) => void;
 
   addProcess: (data: Omit<Process, 'id' | 'status' | 'startTime'>) => void;
-  updateProcess: (id: string, data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging'>>) => void;
+  updateProcess: (id: string, data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging' | 'lotCode' | 'rawMaterial' | 'subtype' | 'variety' | 'producer'>>, options?: { propagateToLinkedPallets?: boolean }) => void;
   deleteProcess: (id: string) => void;
   closeProcess: (id: string) => void;
   addPallet: (data: Omit<Pallet, 'id' | 'timestamp'>) => void;
-  updatePallet: (id: string, data: Partial<Pick<Pallet, 'caseCount' | 'weight' | 'notes'>>) => void;
+  updatePallet: (id: string, data: Partial<Pick<Pallet, 'processId' | 'caseCount' | 'weight' | 'notes' | 'lotCode' | 'rawMaterial' | 'variety' | 'producer' | 'productType' | 'packaging' | 'line' | 'caliber'>>, options?: { propagateToSiblingPallets?: boolean }) => void;
   deletePallet: (id: string) => void;
 
   addRawMaterial: (data: RawMaterialInput) => ValidationResult;
@@ -403,8 +405,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     notify(`Lavorazione avviata su ${data.line}`, 'SUCCESS');
   };
 
-  const updateProcess = (id: string, data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging'>>) => {
-    setProcesses(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+  const updateProcess = (
+    id: string,
+    data: Partial<Pick<Process, 'line' | 'caliber' | 'productTypeId' | 'productType' | 'packagingId' | 'packaging' | 'lotCode' | 'rawMaterial' | 'subtype' | 'variety' | 'producer'>>,
+    options?: { propagateToLinkedPallets?: boolean }
+  ) => {
+    const updated = updateProcessUseCase({
+      processId: id,
+      data,
+      processes,
+      pallets,
+      propagateToLinkedPallets: options?.propagateToLinkedPallets,
+    });
+
+    if (!updated.updatedProcess) return;
+
+    setProcesses(updated.processes);
+    if (options?.propagateToLinkedPallets) {
+      setPallets(updated.pallets);
+      addAuditEvent('PROCESS_UPDATED', 'process', id, `Aggiornata lavorazione ${id} con propagazione pedane`, { affectedPalletCount: updated.affectedPalletCount });
+      notify('Lavorazione aggiornata e propagata sulle pedane collegate', 'SUCCESS');
+      return;
+    }
+
     addAuditEvent('PROCESS_UPDATED', 'process', id, `Aggiornata lavorazione ${id}`);
     notify('Lavorazione aggiornata', 'SUCCESS');
   };
@@ -442,8 +465,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     notify(`Pedana registrata (${data.weight} Kg)`, 'SUCCESS');
   };
 
-  const updatePallet = (id: string, data: Partial<Pick<Pallet, 'caseCount' | 'weight' | 'notes'>>) => {
-    setPallets(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+  const updatePallet = (
+    id: string,
+    data: Partial<Pick<Pallet, 'processId' | 'caseCount' | 'weight' | 'notes' | 'lotCode' | 'rawMaterial' | 'variety' | 'producer' | 'productType' | 'packaging' | 'line' | 'caliber'>>,
+    options?: { propagateToSiblingPallets?: boolean }
+  ) => {
+    const updated = updatePalletUseCase({
+      palletId: id,
+      data,
+      pallets,
+      propagateToSiblingPallets: options?.propagateToSiblingPallets,
+    });
+
+    if (!updated.updatedPallet) return;
+
+    setPallets(updated.pallets);
+    if (options?.propagateToSiblingPallets) {
+      addAuditEvent('PALLET_UPDATED', 'pallet', id, `Aggiornata pedana ${id} con propagazione gruppo`, { affectedSiblingCount: updated.affectedSiblingCount });
+      notify('Pedana aggiornata e propagata al gruppo', 'SUCCESS');
+      return;
+    }
+
     addAuditEvent('PALLET_UPDATED', 'pallet', id, `Aggiornata pedana ${id}`);
     notify('Pedana aggiornata', 'SUCCESS');
   };

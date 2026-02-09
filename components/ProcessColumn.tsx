@@ -5,7 +5,7 @@ import { Process, ProcessStatus, CalibrationStatus } from '../types';
 import { Plus, Settings, StopCircle, ArrowUpCircle, X, ArrowRight, Keyboard, List, Pencil, Trash2 } from 'lucide-react';
 import { StatusBadge } from './ui/Badge';
 import { StatItem } from './ui/Stats';
-import { ConfirmModal, FormModal } from './ui/Modal';
+import { ConfirmModal, DecisionModal, FormModal } from './ui/Modal';
 
 interface Props {
   calibrationId: string | null;
@@ -25,6 +25,9 @@ export const ProcessColumn: React.FC<Props> = ({ calibrationId, selectedId, onSe
   const [editingProcess, setEditingProcess] = useState<Process | null>(null);
   const [editLine, setEditLine] = useState('');
   const [editCaliber, setEditCaliber] = useState('');
+  const [editProductTypeId, setEditProductTypeId] = useState('');
+  const [editPackagingId, setEditPackagingId] = useState('');
+  const [pendingProcessUpdate, setPendingProcessUpdate] = useState<{ processId: string; payload: any } | null>(null);
   const [deleteProcessId, setDeleteProcessId] = useState<string | null>(null);
   
   // Quick Code Inputs
@@ -145,6 +148,13 @@ export const ProcessColumn: React.FC<Props> = ({ calibrationId, selectedId, onSe
     setEditingProcess(proc);
     setEditLine(proc.line);
     setEditCaliber(proc.caliber);
+    setEditProductTypeId(proc.productTypeId || '');
+    setEditPackagingId(proc.packagingId || '');
+  };
+
+  const applyProcessUpdate = (processId: string, payload: any, propagateToLinkedPallets: boolean) => {
+    updateProcess(processId, payload, { propagateToLinkedPallets });
+    setEditingProcess(null);
   };
 
   const handleEditProcessSubmit = (e: React.FormEvent) => {
@@ -152,9 +162,32 @@ export const ProcessColumn: React.FC<Props> = ({ calibrationId, selectedId, onSe
     if (!editingProcess) return;
     const line = editLine.trim();
     const caliber = editCaliber.trim();
-    if (!line || !caliber) return;
-    updateProcess(editingProcess.id, { line, caliber });
-    setEditingProcess(null);
+    if (!line || !caliber || !editProductTypeId || !editPackagingId) return;
+
+    const pt = productTypes.find(p => p.id === editProductTypeId);
+    const pkg = packagings.find(p => p.id === editPackagingId);
+
+    const payload = {
+      line,
+      caliber,
+      productTypeId: editProductTypeId,
+      productType: pt?.name || '',
+      packagingId: editPackagingId,
+      packaging: pkg?.name || '',
+    };
+
+    const linkedPalletsCount = getPalletsByProcess(editingProcess.id).length;
+    const affectsPalletSnapshots = payload.line !== editingProcess.line
+      || payload.caliber !== editingProcess.caliber
+      || payload.productTypeId !== editingProcess.productTypeId
+      || payload.packagingId !== editingProcess.packagingId;
+
+    if (linkedPalletsCount > 0 && affectsPalletSnapshots) {
+      setPendingProcessUpdate({ processId: editingProcess.id, payload });
+      return;
+    }
+
+    applyProcessUpdate(editingProcess.id, payload, false);
   };
 
   const handleDeleteProcess = (proc: Process, e: React.MouseEvent) => {
@@ -361,7 +394,41 @@ export const ProcessColumn: React.FC<Props> = ({ calibrationId, selectedId, onSe
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Calibro</label>
           <input required className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editCaliber} onChange={(e) => setEditCaliber(e.target.value)} />
         </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Articolo</label>
+          <select required className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editProductTypeId} onChange={(e) => setEditProductTypeId(e.target.value)}>
+            <option value="">Seleziona...</option>
+            {availableProductTypes.map(pt => <option key={pt.id} value={pt.id}>{pt.name} ({pt.code})</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Imballaggio</label>
+          <select required className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editPackagingId} onChange={(e) => setEditPackagingId(e.target.value)}>
+            <option value="">Seleziona...</option>
+            {packagings.map(pkg => <option key={pkg.id} value={pkg.id}>{pkg.name} ({pkg.code})</option>)}
+          </select>
+        </div>
       </FormModal>
+
+
+      <DecisionModal
+        isOpen={!!pendingProcessUpdate}
+        onClose={() => setPendingProcessUpdate(null)}
+        title="Propagare modifica alle pedane?"
+        message="Hai modificato dati della lavorazione (articolo/imballaggio/linea/calibro). Vuoi aggiornare anche le pedane già collegate?"
+        primaryLabel="Sì, propaga"
+        secondaryLabel="No, solo lavorazione"
+        onConfirmPrimary={() => {
+          if (!pendingProcessUpdate) return;
+          applyProcessUpdate(pendingProcessUpdate.processId, pendingProcessUpdate.payload, true);
+          setPendingProcessUpdate(null);
+        }}
+        onConfirmSecondary={() => {
+          if (!pendingProcessUpdate) return;
+          applyProcessUpdate(pendingProcessUpdate.processId, pendingProcessUpdate.payload, false);
+          setPendingProcessUpdate(null);
+        }}
+      />
 
       <ConfirmModal
         isOpen={!!deleteProcessId}
