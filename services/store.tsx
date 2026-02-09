@@ -21,6 +21,10 @@ import {
   validateUniqueCode,
   validateVarietyRelations,
 } from './domain/registryValidation';
+import {
+  createPalletUseCase,
+  propagateLotCodeToOperationalSnapshots,
+} from './domain/productionUseCases';
 
 type RawMaterialInput = Omit<RawMaterial, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt' | 'updatedAt'>;
 type VarietyInput = Omit<Variety, 'id' | 'isDeleted' | 'deletedAt' | 'createdAt' | 'updatedAt'>;
@@ -344,23 +348,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addPallet = (data: Omit<Pallet, 'id' | 'timestamp'>) => {
-    const proc = processes.find(p => p.id === data.processId);
-    const cal = proc ? calibrations.find(c => c.id === proc.calibrationId) : undefined;
-    const created: Pallet = {
-      ...data,
-      id: genId('pl'),
-      timestamp: nowIso(),
-      lotCode: proc?.lotCode || cal?.lotCode,
-      rawMaterial: proc?.rawMaterial || cal?.rawMaterial,
-      variety: proc?.variety || cal?.variety,
-      producer: proc?.producer || cal?.producer,
-      productType: proc?.productType,
-      packaging: proc?.packaging,
-      line: proc?.line,
-      caliber: proc?.caliber,
-    };
-    setPallets(prev => [created, ...prev]);
-    addAuditEvent('PALLET_CREATED', 'pallet', created.id, `Registrata pedana ${created.id}`, { processId: created.processId, lotCode: created.lotCode, weight: created.weight });
+    const process = processes.find(p => p.id === data.processId);
+    const calibration = process ? calibrations.find(c => c.id === process.calibrationId) : undefined;
+
+    const { pallet, auditEvent } = createPalletUseCase({
+      data,
+      process,
+      calibration,
+      nowIso: nowIso(),
+      palletId: genId('pl'),
+      auditId: genId('ae'),
+      actorRole: currentUserRole,
+    });
+
+    setPallets(prev => [pallet, ...prev]);
+    setAuditEvents(prev => [auditEvent, ...prev].slice(0, 500));
     notify(`Pedana registrata (${data.weight} Kg)`, 'SUCCESS');
   };
 
@@ -670,16 +672,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLotsState(prev => prev.map(i => i.id === id ? { ...i, ...data, code: normalizedCode, updatedAt: nowIso() } : i));
 
     if (options?.propagateToOperationalSnapshots && previousLot && previousLot.code !== normalizedCode) {
-      const relatedCalibrationIds = calibrations.filter(c => c.lotId === id).map(c => c.id);
-      const relatedProcessIds = processes.filter(p => relatedCalibrationIds.includes(p.calibrationId)).map(p => p.id);
+      const propagated = propagateLotCodeToOperationalSnapshots({
+        lotId: id,
+        newLotCode: normalizedCode,
+        calibrations,
+        processes,
+        pallets,
+      });
 
-      setCalibrations(prev => prev.map(c => c.lotId === id ? { ...c, lotCode: normalizedCode } : c));
-      setProcesses(prev => prev.map(p => relatedCalibrationIds.includes(p.calibrationId) ? { ...p, lotCode: normalizedCode } : p));
-      setPallets(prev => prev.map(pl => relatedProcessIds.includes(pl.processId) ? { ...pl, lotCode: normalizedCode } : pl));
+      setCalibrations(propagated.calibrations);
+      setProcesses(propagated.processes);
+      setPallets(propagated.pallets);
 
       addAuditEvent('LOT_SNAPSHOT_PROPAGATED', 'lot', id, `Propagato lotto ${normalizedCode} su entità operative`, {
-        calibrationCount: relatedCalibrationIds.length,
-        processCount: relatedProcessIds.length,
+        calibrationCount: propagated.affectedCalibrationCount,
+        processCount: propagated.affectedProcessCount,
       });
       notify('Lotto aggiornato e propagato sulle entità operative', 'SUCCESS');
       return ok();
