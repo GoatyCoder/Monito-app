@@ -92,7 +92,8 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
 
   const filteredCalibrations = calibrations.filter(c => 
     c.rawMaterial.toLowerCase().includes(filter.toLowerCase()) ||
-    c.producer.toLowerCase().includes(filter.toLowerCase())
+    c.producer.toLowerCase().includes(filter.toLowerCase()) ||
+    (c.lotCode || '').toLowerCase().includes(filter.toLowerCase())
   );
 
   const handleAddSubmit = (e: React.FormEvent) => {
@@ -326,15 +327,14 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
           const pCount = processes.filter(p => p.calibrationId === cal.id).length;
           const weight = pallets.filter(pal => processes.some(p => p.calibrationId === cal.id && p.id === pal.processId)).reduce((a, b) => a + b.weight, 0);
           
-          // Find if this calibration is linked to a Lot
-          const linkedLot = cal.lotId ? lots.find(l => l.id === cal.lotId) : null;
+          const lotCodeSnapshot = cal.lotCode;
 
           return (
             <div key={cal.id} onClick={() => onSelect(cal.id)} className={`group p-4 border-b border-slate-100 cursor-pointer transition-all hover:bg-white ${isSelected ? 'bg-white ring-1 ring-inset ring-blue-500 border-l-4 border-l-blue-600' : 'border-l-4 border-l-transparent'}`}>
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
                      <h3 className={`font-bold text-sm ${isSelected ? 'text-blue-900' : 'text-slate-800'}`}>{cal.rawMaterial}</h3>
-                     {linkedLot && <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 rounded font-mono border border-yellow-200">{linkedLot.code}</span>}
+                     {lotCodeSnapshot && <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 rounded font-mono border border-yellow-200">{lotCodeSnapshot}</span>}
                 </div>
                 <StatusBadge status={cal.status} />
               </div>
