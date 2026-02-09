@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../services/store';
 import { ProcessStatus, WeightType } from '../types';
 import { Package, Trash2, Clock, Info, Printer, Pencil } from 'lucide-react';
-import { ConfirmModal, DecisionModal, FormModal } from './ui/Modal';
+import { ConfirmModal, FormModal } from './ui/Modal';
 import { LabelEditor } from './LabelEditor';
 
 interface Props {
@@ -30,7 +30,6 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
   const [editPackaging, setEditPackaging] = useState('');
   const [editLine, setEditLine] = useState('');
   const [editCaliber, setEditCaliber] = useState('');
-  const [pendingPalletUpdate, setPendingPalletUpdate] = useState<{ palletId: string; payload: any } | null>(null);
   
   // Printing State
   const [printingPallet, setPrintingPallet] = useState<any | null>(null);
@@ -125,8 +124,8 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
     setEditCaliber(pallet.caliber || process?.caliber || '');
   };
 
-  const applyPalletUpdate = (palletId: string, payload: any, propagateToSiblingPallets: boolean) => {
-    updatePallet(palletId, payload, { propagateToSiblingPallets });
+  const applyPalletUpdate = (palletId: string, payload: any) => {
+    updatePallet(palletId, payload);
     setEditingPallet(null);
   };
 
@@ -157,23 +156,7 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
       caliber: editCaliber.trim() || undefined,
     };
 
-    const affectsGroupSnapshots = payload.processId !== editingPallet.processId
-      || payload.lotCode !== (editingPallet.lotCode || undefined)
-      || payload.rawMaterial !== (editingPallet.rawMaterial || undefined)
-      || payload.variety !== (editingPallet.variety || undefined)
-      || payload.producer !== (editingPallet.producer || undefined)
-      || payload.productType !== (editingPallet.productType || undefined)
-      || payload.packaging !== (editingPallet.packaging || undefined)
-      || payload.line !== (editingPallet.line || undefined)
-      || payload.caliber !== (editingPallet.caliber || undefined);
-
-    const siblingCount = pallets.filter(p => p.processId === editingPallet.processId).length;
-    if (siblingCount > 1 && affectsGroupSnapshots) {
-      setPendingPalletUpdate({ palletId: editingPallet.id, payload });
-      return;
-    }
-
-    applyPalletUpdate(editingPallet.id, payload, false);
+    applyPalletUpdate(editingPallet.id, payload);
   };
 
   const handlePrint = (pallet: any) => {
@@ -255,6 +238,10 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
                         readOnly={process.weightType === WeightType.EGALIZZATO}
                     />
                 </div>
+                <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Note</label>
+                    <input className="w-full border-slate-300 border rounded px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Note opzionali" value={notes} onChange={e => setNotes(e.target.value)} />
+                </div>
                 <button type="submit" className="h-[52px] px-6 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-md flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50">SALVA</button>
             </form>
             {process.weightType === WeightType.EGALIZZATO && (
@@ -323,25 +310,6 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
         </div>
       </FormModal>
 
-
-      <DecisionModal
-        isOpen={!!pendingPalletUpdate}
-        onClose={() => setPendingPalletUpdate(null)}
-        title="Propagare alle pedane dello stesso gruppo?"
-        message="Hai modificato dati condivisi della pedana. Vuoi applicare la modifica a tutte le pedane della stessa lavorazione?"
-        primaryLabel="Sì, propaga"
-        secondaryLabel="No, solo questa"
-        onConfirmPrimary={() => {
-          if (!pendingPalletUpdate) return;
-          applyPalletUpdate(pendingPalletUpdate.palletId, pendingPalletUpdate.payload, true);
-          setPendingPalletUpdate(null);
-        }}
-        onConfirmSecondary={() => {
-          if (!pendingPalletUpdate) return;
-          applyPalletUpdate(pendingPalletUpdate.palletId, pendingPalletUpdate.payload, false);
-          setPendingPalletUpdate(null);
-        }}
-      />
 
       <ConfirmModal 
         isOpen={!!deletePalletId}
