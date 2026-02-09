@@ -305,16 +305,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deleteCalibration = (id: string) => {
     const calibrationProcesses = processes.filter(p => p.calibrationId === id);
-    const calibrationProcessIds = calibrationProcesses.map(p => p.id);
-    const removedPallets = pallets.filter(pl => calibrationProcessIds.includes(pl.processId)).length;
+    const calibrationProcessIds = new Set(calibrationProcesses.map(p => p.id));
 
-    setPallets(prev => prev.filter(pl => !calibrationProcessIds.includes(pl.processId)));
+    const newPallets = pallets.filter(pl => !calibrationProcessIds.has(pl.processId));
+    const removedPalletsCount = pallets.length - newPallets.length;
+
+    setPallets(newPallets);
     setProcesses(prev => prev.filter(p => p.calibrationId !== id));
     setCalibrations(prev => prev.filter(c => c.id !== id));
 
     addAuditEvent('CALIBRATION_DELETED', 'calibration', id, `Eliminata calibrazione ${id} con cascata`, {
       removedProcesses: calibrationProcesses.length,
-      removedPallets,
+      removedPallets: removedPalletsCount,
     });
     notify('Calibrazione eliminata con entità collegate', 'INFO');
   };
@@ -378,10 +380,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteProcess = (id: string) => {
-    const removedPallets = pallets.filter(pl => pl.processId === id).length;
-    setPallets(prev => prev.filter(pl => pl.processId !== id));
+    const newPallets = pallets.filter(pl => pl.processId !== id);
+    const removedPalletsCount = pallets.length - newPallets.length;
+    setPallets(newPallets);
     setProcesses(prev => prev.filter(p => p.id !== id));
-    addAuditEvent('PROCESS_DELETED', 'process', id, `Eliminata lavorazione ${id} con cascata`, { removedPallets });
+    addAuditEvent('PROCESS_DELETED', 'process', id, `Eliminata lavorazione ${id} con cascata`, { removedPallets: removedPalletsCount });
     notify('Lavorazione eliminata con pedane collegate', 'INFO');
   };
 

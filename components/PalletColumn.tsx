@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../services/store';
 import { ProcessStatus, WeightType } from '../types';
-import { Package, Trash2, Clock, Info, Printer } from 'lucide-react';
+import { Package, Trash2, Clock, Info, Printer, Pencil } from 'lucide-react';
 import { ConfirmModal } from './ui/Modal';
 import { LabelEditor } from './LabelEditor';
 
@@ -12,7 +12,7 @@ interface Props {
 }
 
 export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
-  const { processes, getPalletsByProcess, addPallet, deletePallet, calibrations, productTypes } = useData();
+  const { processes, getPalletsByProcess, addPallet, updatePallet, deletePallet, calibrations, productTypes } = useData();
   const [caseCount, setCaseCount] = useState<string>('');
   const [weight, setWeight] = useState<string>('');
   const [notes, setNotes] = useState('');
@@ -92,6 +92,20 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
         notes: notes || undefined 
     });
     setCaseCount(''); setWeight(''); setNotes('');
+  };
+
+
+  const handleEditPallet = (pallet: any) => {
+    const cc = window.prompt('Colli', String(pallet.caseCount));
+    if (!cc) return;
+    const ww = window.prompt('Peso (Kg)', String(pallet.weight));
+    if (!ww) return;
+    const nn = window.prompt('Note (opzionale)', pallet.notes || '');
+    const caseCount = Number(cc);
+    const weight = Number(ww);
+    if (!Number.isFinite(caseCount) || !Number.isInteger(caseCount) || caseCount <= 0) return;
+    if (!Number.isFinite(weight) || weight <= 0) return;
+    updatePallet(pallet.id, { caseCount, weight, notes: nn || undefined });
   };
 
   const handlePrint = (pallet: any) => {
@@ -195,6 +209,7 @@ export const PalletColumn: React.FC<Props> = ({ processId, onBack }) => {
                 </div>
                 <div className="flex gap-1">
                     <button onClick={() => handlePrint(pallet)} className="text-slate-200 hover:text-blue-500 p-2 transition-colors" title="Stampa Etichetta"><Printer className="w-4 h-4" /></button>
+                    {isOpen && <button onClick={() => handleEditPallet(pallet)} className="text-slate-200 hover:text-slate-600 p-2 transition-colors" title="Modifica pedana"><Pencil className="w-4 h-4" /></button>}
                     {isOpen && <button onClick={() => setDeletePalletId(pallet.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors"><Trash2 className="w-4 h-4" /></button>}
                 </div>
             </div>
