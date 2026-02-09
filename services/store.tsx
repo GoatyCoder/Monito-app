@@ -63,7 +63,7 @@ interface DataContextType {
   deleteProcess: (id: string) => void;
   closeProcess: (id: string) => void;
   addPallet: (data: Omit<Pallet, 'id' | 'timestamp'>) => void;
-  updatePallet: (id: string, data: Partial<Pick<Pallet, 'processId' | 'caseCount' | 'weight' | 'notes' | 'lotCode' | 'rawMaterial' | 'variety' | 'producer' | 'productType' | 'packaging' | 'line' | 'caliber'>>, options?: { propagateToSiblingPallets?: boolean }) => void;
+  updatePallet: (id: string, data: Partial<Pick<Pallet, 'processId' | 'caseCount' | 'weight' | 'notes' | 'lotCode' | 'rawMaterial' | 'variety' | 'producer' | 'productType' | 'packaging' | 'line' | 'caliber'>>) => void;
   deletePallet: (id: string) => void;
 
   addRawMaterial: (data: RawMaterialInput) => ValidationResult;
@@ -467,25 +467,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updatePallet = (
     id: string,
-    data: Partial<Pick<Pallet, 'processId' | 'caseCount' | 'weight' | 'notes' | 'lotCode' | 'rawMaterial' | 'variety' | 'producer' | 'productType' | 'packaging' | 'line' | 'caliber'>>,
-    options?: { propagateToSiblingPallets?: boolean }
+    data: Partial<Pick<Pallet, 'processId' | 'caseCount' | 'weight' | 'notes' | 'lotCode' | 'rawMaterial' | 'variety' | 'producer' | 'productType' | 'packaging' | 'line' | 'caliber'>>
   ) => {
-    const updated = updatePalletUseCase({
-      palletId: id,
-      data,
-      pallets,
-      propagateToSiblingPallets: options?.propagateToSiblingPallets,
-    });
-
+    const updated = updatePalletUseCase({ palletId: id, data, pallets });
     if (!updated.updatedPallet) return;
-
     setPallets(updated.pallets);
-    if (options?.propagateToSiblingPallets) {
-      addAuditEvent('PALLET_UPDATED', 'pallet', id, `Aggiornata pedana ${id} con propagazione gruppo`, { affectedSiblingCount: updated.affectedSiblingCount });
-      notify('Pedana aggiornata e propagata al gruppo', 'SUCCESS');
-      return;
-    }
-
     addAuditEvent('PALLET_UPDATED', 'pallet', id, `Aggiornata pedana ${id}`);
     notify('Pedana aggiornata', 'SUCCESS');
   };

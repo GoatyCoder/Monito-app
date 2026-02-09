@@ -22,6 +22,7 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
   const [editSubtypeId, setEditSubtypeId] = useState('');
   const [editVarietyId, setEditVarietyId] = useState('');
   const [editProducer, setEditProducer] = useState('');
+  const [editNote, setEditNote] = useState('');
   const [lotConflictWarning, setLotConflictWarning] = useState<string | null>(null);
   const [pendingCalibrationUpdate, setPendingCalibrationUpdate] = useState<{
     calibrationId: string;
@@ -36,6 +37,7 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
     subtypeId: '',
     varietyId: '',
     producer: '',
+    note: '',
     startDate: new Date().toISOString().split('T')[0]
   });
 
@@ -60,7 +62,8 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
                   rawMaterialId: matchedLot.rawMaterialId,
                   subtypeId: matchedLot.subtypeId || '',
                   varietyId: matchedLot.varietyId || '',
-                  producer: matchedLot.producer
+                  producer: matchedLot.producer,
+                  note: prev.note
               }));
               // Reset other inputs
               setRawCodeInput('');
@@ -123,7 +126,8 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
         subtype: subtypeName,
         varietyId: formData.varietyId,
         variety: varName,
-        producer: formData.producer
+        producer: formData.producer,
+        note: formData.note || undefined
     };
 
     if (isDuplicating) {
@@ -136,7 +140,7 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
       });
       setIsAdding(false);
     }
-    setFormData({ lotId: '', rawMaterialId: '', subtypeId: '', varietyId: '', producer: '', startDate: new Date().toISOString().split('T')[0] });
+    setFormData({ lotId: '', rawMaterialId: '', subtypeId: '', varietyId: '', producer: '', note: '', startDate: new Date().toISOString().split('T')[0] });
     setLotSearchInput('');
   };
 
@@ -149,6 +153,7 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
         subtypeId: cal.subtypeId || '',
         varietyId: cal.varietyId || '',
         producer: cal.producer,
+        note: cal.note || '',
         startDate: new Date().toISOString().split('T')[0]
     });
   };
@@ -176,6 +181,7 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
     setEditSubtypeId(cal.subtypeId || '');
     setEditVarietyId(cal.varietyId || '');
     setEditProducer(cal.producer || '');
+    setEditNote(cal.note || '');
     setLotConflictWarning(null);
   };
 
@@ -236,6 +242,7 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
         subtype: subtypes.find(st => st.id === existingLot.subtypeId)?.name || '',
         variety: varieties.find(v => v.id === existingLot.varietyId)?.name || editingCalibration.variety,
         producer: existingLot.producer,
+        note: editNote.trim() || undefined,
       };
 
       const processIds = new Set(processes.filter(p => p.calibrationId === editingCalibration.id).map(p => p.id));
@@ -276,6 +283,7 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
       subtype: subtypes.find(st => st.id === editSubtypeId)?.name || '',
       variety: varieties.find(v => v.id === editVarietyId)?.name || '',
       producer,
+      note: editNote.trim() || undefined,
     };
 
     const processIds = new Set(processes.filter(p => p.calibrationId === editingCalibration.id).map(p => p.id));
@@ -418,6 +426,17 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
           />
         </div>
 
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Note</label>
+          <textarea
+            rows={2}
+            className="w-full border rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            placeholder="Note opzionali"
+            value={formData.note}
+            onChange={e => setFormData({...formData, note: e.target.value})}
+          />
+        </div>
+
         {!isDuplicating && (
              <div>
              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data</label>
@@ -433,7 +452,7 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
      
         <div className="flex gap-2">
              {formData.lotId && (
-                 <button type="button" onClick={() => { setFormData({ lotId: '', rawMaterialId: '', subtypeId: '', varietyId: '', producer: '', startDate: formData.startDate }); setLotSearchInput(''); }} className="px-3 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-widest text-xs hover:bg-slate-200">Reset</button>
+                 <button type="button" onClick={() => { setFormData({ lotId: '', rawMaterialId: '', subtypeId: '', varietyId: '', producer: '', note: formData.note, startDate: formData.startDate }); setLotSearchInput(''); }} className="px-3 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-widest text-xs hover:bg-slate-200">Reset</button>
              )}
             <button type="submit" className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold shadow-md transition-all active:scale-95 uppercase tracking-widest text-xs">
             {isDuplicating ? 'Conferma Cambio Lotto' : 'Crea Calibrazione'}
@@ -554,6 +573,10 @@ export const CalibrationColumn: React.FC<Props> = ({ selectedId, onSelect }) => 
             value={editProducer}
             onChange={(e) => setEditProducer(e.target.value)}
           />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Note</label>
+          <textarea rows={2} className="w-full border rounded px-2.5 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editNote} onChange={(e) => setEditNote(e.target.value)} />
         </div>
         {lotConflictWarning && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{lotConflictWarning}</div>}
       </FormModal>
