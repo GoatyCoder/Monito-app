@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Monito.Web;
 using Monito.Web.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
