@@ -1,0 +1,48 @@
+@page "/"
+@inject ProductionApiClient Api
+
+<h1>Monito - Dashboard</h1>
+
+@if (_loading)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <p>Calibrazioni attive: @_calibrations.Count</p>
+    <ul>
+        @foreach (var item in _calibrations)
+        {
+            <li><strong>@item.LotCode</strong> - @item.RawMaterial / @item.Variety (@item.Producer)</li>
+        }
+    </ul>
+}
+
+<EditForm Model="_newCalibration" OnValidSubmit="CreateCalibrationAsync">
+    <h3>Nuova calibrazione</h3>
+    <InputText @bind-Value="_newCalibration.LotCode" placeholder="Lotto" />
+    <InputText @bind-Value="_newCalibration.RawMaterial" placeholder="Grezzo" />
+    <InputText @bind-Value="_newCalibration.Variety" placeholder="Varietà" />
+    <InputText @bind-Value="_newCalibration.Producer" placeholder="Produttore" />
+    <InputNumber @bind-Value="_newCalibration.IncomingRawWeightKg" />
+    <button type="submit">Salva</button>
+</EditForm>
+
+@code {
+    private bool _loading = true;
+    private List<CalibrationVm> _calibrations = [];
+    private NewCalibrationVm _newCalibration = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _calibrations = await Api.GetCalibrationsAsync();
+        _loading = false;
+    }
+
+    private async Task CreateCalibrationAsync()
+    {
+        await Api.CreateCalibrationAsync(_newCalibration);
+        _calibrations = await Api.GetCalibrationsAsync();
+        _newCalibration = new();
+    }
+}
