@@ -120,6 +120,7 @@ export interface LabelLayout {
 export interface Calibration {
   id: string;
   lotId?: string; // Reference to Lot registry
+  lotCode?: string; // Snapshot at creation time
   rawMaterialId?: string;
   subtypeId?: string; 
   varietyId: string;
@@ -147,6 +148,13 @@ export interface Process {
   startTime: string;
   endTime?: string;
   status: ProcessStatus;
+
+  // Immutable snapshots from calibration at process creation.
+  lotCode?: string;
+  rawMaterial?: string;
+  subtype?: string;
+  variety?: string;
+  producer?: string;
 }
 
 export interface Pallet {
@@ -156,6 +164,33 @@ export interface Pallet {
   caseCount: number; 
   weight: number; 
   notes?: string;
+
+  // Immutable snapshots at pallet creation time.
+  lotCode?: string;
+  rawMaterial?: string;
+  variety?: string;
+  producer?: string;
+  productType?: string;
+  packaging?: string;
+  line?: string;
+  caliber?: string;
+}
+
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  MANAGER = 'MANAGER',
+  OPERATOR = 'OPERATOR',
+}
+
+export interface AuditEvent {
+  id: string;
+  timestamp: string;
+  action: string;
+  entity: string;
+  entityId?: string;
+  actorRole: UserRole;
+  message: string;
+  metadata?: Record<string, string | number | boolean | null | undefined>;
 }
 
 export interface ProcessStats {
